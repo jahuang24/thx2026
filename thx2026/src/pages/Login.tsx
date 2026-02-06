@@ -11,7 +11,13 @@ export function Login() {
           onClick={() => navigate('/doctor-login')}
           className="w-full rounded-full bg-ink-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-ink-800"
         >
-          Log In
+          Doctor Login
+        </button>
+        <button
+          onClick={() => navigate('/patient-portal')}
+          className="w-full rounded-full border border-ink-200 bg-white px-4 py-3 text-sm font-semibold text-ink-900 transition hover:bg-ink-50"
+        >
+          Patient Portal
         </button>
       </div>
     </div>

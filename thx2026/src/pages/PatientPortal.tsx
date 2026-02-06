@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { patients } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
@@ -8,6 +9,7 @@ const formatTime = (value: string) =>
   new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 export function PatientPortalPage() {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>(store.messages);
   const [activePatientId, setActivePatientId] = useState<string>(() => patients[0]?.id ?? '');
   const [draft, setDraft] = useState('');
@@ -49,6 +51,12 @@ export function PatientPortalPage() {
       <div className="mx-auto max-w-4xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
+            <button
+              onClick={() => navigate('/')}
+              className="mb-4 text-sm font-semibold text-ink-500 hover:text-ink-900"
+            >
+              &larr; Back to Login
+            </button>
             <p className="text-xs uppercase tracking-[0.3em] text-ink-400">Patient Portal</p>
             <h1 className="text-3xl font-display font-semibold text-ink-950">Message Your Care Team</h1>
             <p className="mt-2 text-sm text-ink-500">

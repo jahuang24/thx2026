@@ -6,10 +6,11 @@ import { AdminPage } from './pages/Admin';
 import { Login } from './pages/Login';
 import { DoctorLogin } from './pages/DoctorLogin';
 import { DoctorDashboard } from './pages/DoctorDashboard';
-import { MessagesPage } from './pages/Messages';
 
 import { PatientDetailPage } from './pages/PatientDetail';
 import { PatientPortalPage } from './pages/PatientPortal';
+
+import { MessagesPage } from './pages/Messages';
 import { RoomsIndexPage } from './pages/RoomsIndex';
 import { RoomDetailPage } from './pages/RoomDetail';
 import { TasksPage } from './pages/Tasks';
