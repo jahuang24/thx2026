@@ -1,15 +1,35 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { currentUser } from '../data/mock';
-
-const navItems = [
-  { path: '/', label: 'Unit Overview' },
-  { path: '/admissions', label: 'Admissions & Placement' },
-  { path: '/tasks', label: 'Tasks' },
-  { path: '/alerts', label: 'Alerts' },
-  { path: '/admin', label: 'Admin' }
-];
+import { realtimeBus } from '../services/realtime';
+import { store } from '../services/store';
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const [messageVersion, setMessageVersion] = useState(0);
+
+  useEffect(() => {
+    const unsubscribeNew = realtimeBus.on('newMessage', () => setMessageVersion((prev) => prev + 1));
+    const unsubscribeUpdated = realtimeBus.on('messageUpdated', () => setMessageVersion((prev) => prev + 1));
+    return () => {
+      unsubscribeNew();
+      unsubscribeUpdated();
+    };
+  }, []);
+
+  const unreadMessages = useMemo(
+    () => store.messages.filter((message) => message.sender === 'PATIENT' && !message.readByNurse).length,
+    [messageVersion]
+  );
+
+  const navItems = [
+    { path: '/', label: 'Unit Overview' },
+    { path: '/admissions', label: 'Admissions & Placement' },
+    { path: '/tasks', label: 'Tasks' },
+    { path: '/messages', label: 'Patient Messages', badge: unreadMessages },
+    { path: '/alerts', label: 'Alerts' },
+    { path: '/admin', label: 'Admin' }
+  ];
+
   return (
     <div className="min-h-screen bg-transparent text-ink-950">
       <div className="flex min-h-screen">
@@ -34,7 +54,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 }
               >
                 <span>{item.label}</span>
-                <span className="text-xs text-ink-300">→</span>
+                <span className="flex items-center gap-2 text-xs text-ink-300">
+                  {item.badge && item.badge > 0 ? (
+                    <span className="rounded-full bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-600">
+                      {item.badge}
+                    </span>
+                  ) : null}
+                  <span>→</span>
+                </span>
               </NavLink>
             ))}
           </nav>

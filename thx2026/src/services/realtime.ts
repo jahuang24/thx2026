@@ -6,6 +6,8 @@ type EventName =
   | 'newAlert'
   | 'alertUpdated'
   | 'taskUpdated'
+  | 'newMessage'
+  | 'messageUpdated'
   | 'cvEventIngested';
 
 class RealtimeBus {
