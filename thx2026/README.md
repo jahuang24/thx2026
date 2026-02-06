@@ -1,73 +1,61 @@
-# React + TypeScript + Vite
+# Hospital Flow Dashboard (MVP)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Production-ready MVP dashboard focused on unit-wide flow, room readiness, and safety alerts. This build is a **frontend-only MVP** that runs locally with mocked data, plus a CV event simulator and explainable bed recommendation logic.
 
-Currently, two official plugins are available:
+## Quickstart
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open `http://localhost:5173`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## What’s Included
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- **Unit overview** with occupancy, readiness, and live alerts
+- **Room readiness** details with EVS/maintenance cues
+- **Patient monitoring** alerts (mocked CV events)
+- **Admissions & placement** with explainable scoring
+- **Tasks board** for EVS/maintenance workflows
+- **Admin view** for units/rooms
+- **Role-aware UI copy** and HIPAA/assistive CV disclaimers
+
+## Simulated CV Events
+
+A local simulator emits CV events every ~6 seconds and triggers alerts via an in-memory realtime bus. The CV rules engine lives in `src/logic/cvProcessor.ts` and is designed to be replaced by a real inference pipeline later.
+
+## Architecture Notes (MVP)
+
+- **Frontend only** (React + Vite + Tailwind)
+- **In-memory store** for alerts and tasks
+- **Realtime bus** via `EventTarget`
+- **All data mocked in** `src/data/mock.ts`
+- **Explainable placement** in `src/logic/recommendation.ts`
+
+## Safety + Compliance Notes
+
+- CV detections are **assistive only** and require human verification
+- UI defaults to minimal PHI exposure
+- Role-based access control, audit logging, and encryption notes are scaffolded in UI copy
+
+## Scripts
+
+- `npm run dev` - start local dev server
+- `npm run build` - production build
+- `npm run test` - run unit/component tests
+
+## Defaults Assumed
+
+- Single hospital unit with mock rooms and beds
+- Mock auth (no password verification)
+- CV detections are simulated locally
+
+## Roadmap (Next 6 Features)
+
+1. Backend API (Fastify + Prisma + Postgres) with RBAC and audit logging
+2. WebSocket/SSE realtime streams for alerts and room status
+3. CV event ingestion service + worker queue (BullMQ/Redis)
+4. Patient portal with limited read-only views and education tasks
+5. Staffing and workload analytics module
+6. Compliance exports (audit log downloads, incident reports)
