@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { BrowserRouter } from 'react-router-dom';
-import { OverviewPage } from '../pages/Overview';
+import { OverviewPage } from '../pages/DoctorDashboard';
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => <BrowserRouter>{children}</BrowserRouter>;
 

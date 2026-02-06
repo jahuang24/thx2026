@@ -3,13 +3,15 @@ import { Layout } from './components/Layout';
 import { AlertsPage } from './pages/Alerts';
 import { AdmissionsPage } from './pages/Admissions';
 import { AdminPage } from './pages/Admin';
-import { LoginPage } from './pages/Login';
-import { NotFoundPage } from './pages/NotFound';
-import { OverviewPage } from './pages/Overview';
+import { Login } from './pages/Login';
+import { DoctorLogin } from './pages/DoctorLogin';
+import { DoctorDashboard } from './pages/DoctorDashboard';
 import { PatientDetailPage } from './pages/PatientDetail';
 import { RoomsIndexPage } from './pages/RoomsIndex';
 import { RoomDetailPage } from './pages/RoomDetail';
 import { TasksPage } from './pages/Tasks';
+import { NotFoundPage } from './pages/NotFound';
+
 import { PatientsIndexPage } from './pages/patients/PatientsIndex';
 import { startCvSimulator } from './services/cvSimulator';
 import { useEffect } from 'react';
@@ -27,12 +29,16 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/doctor-login" element={<DoctorLogin />} />
         <Route
           path="/"
+          element={<Login />}
+        />
+        <Route
+          path="/doctor-dashboard"
           element={
             <Layout>
-              <OverviewPage />
+              <DoctorDashboard />
             </Layout>
           }
         />
