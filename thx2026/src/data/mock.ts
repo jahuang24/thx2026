@@ -3,6 +3,7 @@ import type {
   Alert,
   Bed,
   CVEvent,
+  Message,
   Patient,
   Room,
   Sensor,
@@ -215,6 +216,36 @@ export const alerts: Alert[] = [
     category: 'EQUIPMENT',
     status: 'OPEN',
     createdAt: '2026-02-06T04:26:10Z'
+  }
+];
+
+export const messages: Message[] = [
+  {
+    id: 'msg-1',
+    patientId: 'patient-1',
+    sender: 'PATIENT',
+    body: 'My IV line feels tight. Can someone check it?',
+    sentAt: '2026-02-06T05:10:00Z',
+    readByNurse: false,
+    readByPatient: true
+  },
+  {
+    id: 'msg-2',
+    patientId: 'patient-1',
+    sender: 'NURSE',
+    body: 'On my way to take a look. Please keep your arm still.',
+    sentAt: '2026-02-06T05:12:00Z',
+    readByNurse: true,
+    readByPatient: false
+  },
+  {
+    id: 'msg-3',
+    patientId: 'patient-2',
+    sender: 'PATIENT',
+    body: 'I am feeling a bit short of breath.',
+    sentAt: '2026-02-06T04:55:00Z',
+    readByNurse: true,
+    readByPatient: true
   }
 ];
 

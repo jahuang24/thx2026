@@ -11,6 +11,7 @@ export type AdmissionStatus = 'PENDING' | 'ASSIGNED' | 'ADMITTED';
 export type RoomType = 'ICU' | 'MED_SURG' | 'OBS' | 'ISOLATION';
 export type AcuityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type MobilityRisk = 'LOW' | 'MEDIUM' | 'HIGH';
+export type MessageSender = 'PATIENT' | 'NURSE';
 
 export interface Unit {
   id: string;
@@ -115,6 +116,16 @@ export interface User {
   id: string;
   name: string;
   role: Role;
+}
+
+export interface Message {
+  id: string;
+  patientId: string;
+  sender: MessageSender;
+  body: string;
+  sentAt: string;
+  readByNurse: boolean;
+  readByPatient: boolean;
 }
 
 export interface RecommendationScore {

@@ -6,7 +6,10 @@ import { AdminPage } from './pages/Admin';
 import { Login } from './pages/Login';
 import { DoctorLogin } from './pages/DoctorLogin';
 import { DoctorDashboard } from './pages/DoctorDashboard';
+import { MessagesPage } from './pages/Messages';
+
 import { PatientDetailPage } from './pages/PatientDetail';
+import { PatientPortalPage } from './pages/PatientPortal';
 import { RoomsIndexPage } from './pages/RoomsIndex';
 import { RoomDetailPage } from './pages/RoomDetail';
 import { TasksPage } from './pages/Tasks';
@@ -91,6 +94,14 @@ function App() {
           }
         />
         <Route
+          path="/messages"
+          element={
+            <Layout>
+              <MessagesPage />
+            </Layout>
+          }
+        />
+        <Route
           path="/alerts"
           element={
             <Layout>
@@ -98,6 +109,7 @@ function App() {
             </Layout>
           }
         />
+        <Route path="/patient-portal" element={<PatientPortalPage />} />
         <Route
           path="/admin"
           element={
