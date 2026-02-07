@@ -97,7 +97,7 @@ router.post("/speak", async (req, res) => {
   try {
     const { text } = req.body;
 
-    const audioStream = await elevenlabs.textToSpeech.convert("pFZP5JQG7iQjIQuC4Bku", {
+    const audioStream = await elevenlabs.textToSpeech.convert("wJ5MX7uuKXZwFqGdWM4N", {
       text: text,
       model_id: "eleven_multilingual_v2",
       output_format: "mp3_44100_128",
