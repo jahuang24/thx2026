@@ -1,15 +1,27 @@
 import express from "express";
 import { getDb } from "../db/connection.js";
 import { ObjectId } from "mongodb";
-import pdfParse from "pdf-parse";
 import crypto from "crypto";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { Readable } from "stream";
 
 const router = express.Router();
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
-const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
+const DEDALUS_API_KEY = process.env.DEDALUS_API_KEY || process.env.VITE_DEDALUS_API_KEY || "";
+const DEDALUS_API_URL =
+  process.env.DEDALUS_API_URL || process.env.VITE_DEDALUS_API_URL || "https://api.dedaluslabs.ai";
+const DEDALUS_EMBED_MODEL = process.env.DEDALUS_EMBED_MODEL || "text-embedding-3-small";
+const DEDALUS_CHAT_MODEL = process.env.DEDALUS_CHAT_MODEL || process.env.VITE_DEDALUS_MODEL || "openai/gpt-4o-mini";
+const BAYMAX_MAX_EMBED_CHUNKS = Number(process.env.BAYMAX_MAX_EMBED_CHUNKS || 80);
+const BAYMAX_EMBED_MAX_NEW_PER_TURN = Number(process.env.BAYMAX_EMBED_MAX_NEW_PER_TURN || 8);
+const BAYMAX_EMBED_BATCH_SIZE = Number(process.env.BAYMAX_EMBED_BATCH_SIZE || 4);
+const BAYMAX_CONTEXT_MESSAGES = Number(process.env.BAYMAX_CONTEXT_MESSAGES || 8);
+const BAYMAX_DOC_TEXT_MAX_CHARS = Number(process.env.BAYMAX_DOC_TEXT_MAX_CHARS || 4000);
+const BAYMAX_CHAT_MAX_TOKENS = Number(process.env.BAYMAX_CHAT_MAX_TOKENS || 120);
+const BAYMAX_SKIP_QUERY_EMBED =
+  String(process.env.BAYMAX_SKIP_QUERY_EMBED ?? "true").trim().toLowerCase() !== "false";
+const BAYMAX_VOICE_ID = process.env.BAYMAX_VOICE_ID || "5e3JKXK83vvgQqBcdUol";
+const ELEVENLABS_TTS_MODEL_ID = process.env.ELEVENLABS_TTS_MODEL_ID || "eleven_flash_v2_5";
+const ELEVENLABS_OUTPUT_FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_22050_32";
 
 const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY, 
@@ -44,17 +56,17 @@ const hashText = (text) =>
   crypto.createHash("sha256").update(text).digest("hex");
 
 async function embedText(text) {
-  if (!OPENAI_API_KEY) {
-    throw new Error("Missing OPENAI_API_KEY");
+  if (!DEDALUS_API_KEY) {
+    throw new Error("Missing DEDALUS_API_KEY");
   }
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
+  const response = await fetch(`${DEDALUS_API_URL}/v1/embeddings`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${DEDALUS_API_KEY}`,
     },
     body: JSON.stringify({
-      model: OPENAI_EMBED_MODEL,
+      model: DEDALUS_EMBED_MODEL,
       input: text,
     }),
   });
@@ -67,18 +79,19 @@ async function embedText(text) {
 }
 
 async function chatResponse(system, user) {
-  if (!OPENAI_API_KEY) {
-    throw new Error("Missing OPENAI_API_KEY");
+  if (!DEDALUS_API_KEY) {
+    throw new Error("Missing DEDALUS_API_KEY");
   }
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(`${DEDALUS_API_URL}/v1/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${DEDALUS_API_KEY}`,
     },
     body: JSON.stringify({
-      model: OPENAI_CHAT_MODEL,
+      model: DEDALUS_CHAT_MODEL,
       temperature: 0.2,
+      max_tokens: BAYMAX_CHAT_MAX_TOKENS,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
@@ -98,14 +111,28 @@ router.post("/speak", async (req, res) => {
     // Extract voiceId from body
     const { text, voiceId } = req.body; 
     console.log("connected to baymax");
-    // Fallback to a default if the frontend doesn't send one
-    const targetVoice = voiceId || process.env.ELEVENLABS_VOICE_ID || "wJ5MX7uuKXZwFqGdWM4N";
-    console.log(targetVoice);
-    const audioStream = await elevenlabs.textToSpeech.convert(targetVoice, {
-      text: text,
-      model_id: "eleven_multilingual_v2",
-      output_format: "mp3_44100_128",
-    });
+    // Keep Baymax voice consistent: first try requested voice, then hard fallback to Baymax voice id.
+    const requestedVoice = voiceId || process.env.ELEVENLABS_VOICE_ID || BAYMAX_VOICE_ID;
+    const fallbackVoice = BAYMAX_VOICE_ID;
+    console.log(requestedVoice);
+    let audioStream;
+    try {
+      audioStream = await elevenlabs.textToSpeech.convert(requestedVoice, {
+        text: text,
+        model_id: ELEVENLABS_TTS_MODEL_ID,
+        output_format: ELEVENLABS_OUTPUT_FORMAT,
+      });
+    } catch (primaryError) {
+      if (requestedVoice === fallbackVoice) {
+        throw primaryError;
+      }
+      console.warn("Primary voice failed. Falling back to Baymax voice.", primaryError?.message || primaryError);
+      audioStream = await elevenlabs.textToSpeech.convert(fallbackVoice, {
+        text: text,
+        model_id: ELEVENLABS_TTS_MODEL_ID,
+        output_format: ELEVENLABS_OUTPUT_FORMAT,
+      });
+    }
 
     res.set({
       "Content-Type": "audio/mpeg",
@@ -115,8 +142,20 @@ router.post("/speak", async (req, res) => {
     Readable.fromWeb(audioStream).pipe(res);
 
   } catch (err) {
-    console.error("ElevenLabs Error:", err);
-    res.status(500).send("Speech synthesis failed");
+    const message =
+      err?.body?.detail?.message ||
+      err?.responseBody?.detail?.message ||
+      err?.message ||
+      "Speech synthesis failed";
+    const quotaExceeded =
+      String(err?.body?.detail?.status || err?.responseBody?.detail?.status || "").toLowerCase() === "quota_exceeded" ||
+      String(message).toLowerCase().includes("quota");
+
+    console.error("ElevenLabs Error:", message);
+    res.status(quotaExceeded ? 429 : 500).json({
+      code: quotaExceeded ? "VOICE_QUOTA_EXCEEDED" : "VOICE_SYNTHESIS_FAILED",
+      message,
+    });
   }
 });
 
@@ -347,73 +386,106 @@ router.post("/:id/chat", async (req, res) => {
     const recordNotes = medicalRecord.notes || "";
     const documents = Array.isArray(medicalRecord.documents) ? medicalRecord.documents : [];
 
-    const documentTexts = [];
-    for (const doc of documents) {
-      try {
-        if (!doc?.data) continue;
-        const buffer = Buffer.from(doc.data, "base64");
-        const parsed = await pdfParse(buffer);
-        if (parsed.text) {
-          documentTexts.push({ name: doc.name || "document", text: parsed.text });
-        }
-      } catch (err) {
-        console.error("PDF parse failed:", err);
-      }
-    }
+    // Keep the chat turn fast: use precomputed/summary text instead of parsing PDF binaries on every request.
+    const documentTexts = documents
+      .map((doc) => {
+        const extractedText =
+          (typeof doc?.extractedText === "string" && doc.extractedText.trim()) ||
+          (typeof doc?.summary === "string" && doc.summary.trim()) ||
+          "";
+        if (!extractedText) return null;
+        return {
+          name: doc?.name || doc?.title || "document",
+          text: extractedText.slice(0, BAYMAX_DOC_TEXT_MAX_CHARS)
+        };
+      })
+      .filter(Boolean);
 
     const vitalsSummary = patient.vitals ? JSON.stringify(patient.vitals) : "Vitals not available.";
     const messageSummary = recentMessages
+      .slice(0, BAYMAX_CONTEXT_MESSAGES)
       .map((item) => `[${item.sender}] ${item.body}`)
       .join("\\n");
 
-    const sources = [
+    const stableSources = [
       { id: "record-notes", text: recordNotes },
-      { id: "vitals", text: vitalsSummary },
-      { id: "messages", text: messageSummary }
+      { id: "vitals", text: vitalsSummary }
     ];
 
     documentTexts.forEach((doc, index) => {
-      sources.push({ id: `doc-${index}-${doc.name}`, text: doc.text });
+      stableSources.push({ id: `doc-${index}-${doc.name}`, text: doc.text });
     });
 
-    const chunks = sources.flatMap((source) =>
+    const stableChunks = stableSources.flatMap((source) =>
       chunkText(source.text).map((chunk, index) => ({
         id: `${source.id}-${index}`,
-        text: chunk,
+        text: chunk
       }))
-    ).filter((chunk) => chunk.text && chunk.text.trim().length > 0);
+    )
+      .filter((chunk) => chunk.text && chunk.text.trim().length > 0)
+      .slice(0, BAYMAX_MAX_EMBED_CHUNKS)
+      .map((chunk) => ({ ...chunk, hash: hashText(chunk.text) }));
 
-    const existingEmbeddings = await embeddingsCol
-      .find({ patientId, hash: { $in: chunks.map((c) => hashText(c.text)) } })
-      .toArray();
+    const stableHashes = stableChunks.map((chunk) => chunk.hash);
+    const existingEmbeddings = stableHashes.length
+      ? await embeddingsCol.find({ patientId, hash: { $in: stableHashes } }).toArray()
+      : [];
     const existingHash = new Set(existingEmbeddings.map((item) => item.hash));
 
-    for (const chunk of chunks) {
-      const hash = hashText(chunk.text);
-      if (existingHash.has(hash)) continue;
-      const embedding = await embedText(chunk.text);
-      await embeddingsCol.insertOne({
-        patientId,
-        hash,
-        text: chunk.text,
-        embedding,
-        createdAt: new Date().toISOString(),
+    const missingChunks = stableChunks
+      .filter((chunk) => !existingHash.has(chunk.hash))
+      .slice(0, BAYMAX_EMBED_MAX_NEW_PER_TURN);
+
+    if (missingChunks.length) {
+      // Warm embeddings asynchronously so the current turn stays conversational.
+      void (async () => {
+        for (let cursor = 0; cursor < missingChunks.length; cursor += BAYMAX_EMBED_BATCH_SIZE) {
+          const batch = missingChunks.slice(cursor, cursor + BAYMAX_EMBED_BATCH_SIZE);
+          const embeddedBatch = await Promise.all(
+            batch.map(async (chunk) => ({
+              patientId,
+              hash: chunk.hash,
+              text: chunk.text,
+              embedding: await embedText(chunk.text),
+              createdAt: new Date().toISOString()
+            }))
+          );
+          if (embeddedBatch.length) {
+            await embeddingsCol.insertMany(embeddedBatch);
+          }
+        }
+      })().catch((error) => {
+        console.error("Background embedding warmup failed:", error);
       });
-      existingHash.add(hash);
-      existingEmbeddings.push({ hash, embedding, text: chunk.text });
     }
 
-    const queryEmbedding = await embedText(String(message));
-    const ranked = existingEmbeddings
-      .map((item) => ({
-        text: item.text,
-        score: cosineSimilarity(queryEmbedding, item.embedding),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
-      .map((item) => item.text);
+    let ranked = [];
+    if (existingEmbeddings.length > 0) {
+      if (BAYMAX_SKIP_QUERY_EMBED) {
+        ranked = existingEmbeddings.slice(0, 6).map((item) => item.text);
+      } else {
+        const queryEmbedding = await embedText(String(message));
+        ranked = existingEmbeddings
+          .map((item) => ({
+            text: item.text,
+            score: cosineSimilarity(queryEmbedding, item.embedding),
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6)
+          .map((item) => item.text);
+      }
+    }
 
-    const contextBlock = ranked.join("\\n---\\n");
+    const contextSections = [];
+    if (ranked.length) {
+      contextSections.push(`Relevant record context:\\n${ranked.join("\\n---\\n")}`);
+    } else if (recordNotes) {
+      contextSections.push(`Record notes:\\n${recordNotes.slice(0, 1400)}`);
+    }
+    if (messageSummary) {
+      contextSections.push(`Recent conversation:\\n${messageSummary}`);
+    }
+    const contextBlock = contextSections.join("\\n\\n");
 
     const systemPrompt = [
       "You are Baymax, a bedside patient assistant.",
