@@ -42,7 +42,7 @@ class Store {
 
   async refreshMessages() {
     try {
-      const response = await fetch(MESSAGES_ENDPOINT);
+      const response = await fetch(`${MESSAGES_ENDPOINT}?limit=200`);
       if (!response.ok) return;
       const data = (await response.json()) as any[];
       this.messages = Array.isArray(data)

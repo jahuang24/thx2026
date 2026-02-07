@@ -181,7 +181,14 @@ router.get("/:id", async (req, res) => {
   try {
     const db = getDb();
     const collection = db.collection("Patients");
-    const patient = await collection.findOne({ _id: new ObjectId(req.params.id) });
+
+    // Exclude heavy medicalRecord/docs from the common detail fetch; they have a dedicated route.
+    const projection = { medicalRecord: 0 };
+
+    const patient = await collection.findOne(
+      { _id: new ObjectId(req.params.id) },
+      { projection }
+    );
     if (!patient) {
       res.status(404).send("Not found");
       return;
@@ -242,7 +249,16 @@ router.get("/", async (req, res) => {
   try {
     const db = getDb();
     const collection = db.collection("Patients");
-    const results = await collection.find({}).sort({ createdAt: -1 }).toArray();
+
+    // Only return fields needed for list views to keep payloads small and fast.
+    const projection = { name: 1, mrn: 1, dob: 1, roomId: 1, bedId: 1, createdAt: 1 };
+
+    const results = await collection
+      .find({}, { projection })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .toArray();
+
     res.status(200).send(results);
   } catch (err) {
     console.error(err);
@@ -401,6 +417,23 @@ router.post("/:id/chat", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send("Error generating response");
+  }
+});
+
+// Add indexes to optimize database queries
+router.post("/initialize", async (req, res) => {
+  try {
+    const db = getDb();
+    const collection = db.collection("Patients");
+
+    // Ensure indexes for faster queries
+    await collection.createIndex({ mrn: 1 });
+    await collection.createIndex({ _id: 1 });
+
+    res.status(200).send("Indexes created successfully");
+  } catch (error) {
+    console.error("Error creating indexes:", error);
+    res.status(500).send("Failed to create indexes");
   }
 });
 

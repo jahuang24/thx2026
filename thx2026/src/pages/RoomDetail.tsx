@@ -15,10 +15,11 @@ export function RoomDetailPage() {
   const roomEvents = cvEvents.filter((event) => event.roomId === roomId);
   const roomAlerts = alerts.filter((alert) => alert.roomId === roomId);
 
+  // Update fetchPatients call to include pagination
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const result = await fetchPatients();
+      const result = await fetchPatients({ page: 1, limit: 10 }); // Fetch first 10 patients
       if (active) {
         setPatients(result);
       }
