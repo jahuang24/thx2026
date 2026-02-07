@@ -13,11 +13,11 @@ import { NotFoundPage } from './pages/NotFound';
 import { PatientLogin } from './pages/PatientLogin';
 import { PatientDetailPage } from './pages/PatientDetail';
 import { PatientMonitorPage } from './pages/PatientMonitor';
-import PatientMonitorSearch from './pages/PatientMonitorSearch';
 import { PatientPortalPage } from './pages/PatientPortal';
 import { RoomDetailPage } from './pages/RoomDetail';
 import { RoomsIndexPage } from './pages/RoomsIndex';
 import { TasksPage } from './pages/Tasks';
+import { TriagePage } from './pages/Triage';
 import { PatientsIndexPage } from './pages/patients/PatientsIndex';
 import { startCvSimulator } from './services/cvSimulator';
 import { MonitorStoreProvider } from './store/monitorStore';
@@ -45,14 +45,7 @@ function App() {
           </Layout>
         }
       />
-      <Route
-        path="/monitor"
-        element={
-          <Layout pageTitle="Patient Monitor">
-            <PatientMonitorSearch />
-          </Layout>
-        }
-      />
+      
       <Route
         path="/monitor/:patientId"
         element={
@@ -60,6 +53,14 @@ function App() {
             <MonitorStoreProvider>
               <PatientMonitorPage />
             </MonitorStoreProvider>
+          </Layout>
+        }
+      />
+      <Route
+        path="/triage-board"
+        element={
+          <Layout pageTitle="Triage Board">
+            <TriagePage />
           </Layout>
         }
       />

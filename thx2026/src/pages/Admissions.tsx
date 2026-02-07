@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { beds, rooms } from '../data/mock';
 import { recommendBeds } from '../logic/recommendation';
-import type { RecommendationScore } from '../types';
+import type { RecommendationScore, Room } from '../types';
 import { fetchPatients, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
 import {
   ensureAdmissionsQueue,
@@ -66,7 +66,7 @@ export function AdmissionsPage() {
     }));
   }, [patients]);
 
-  const derivedRooms = useMemo(() => {
+  const derivedRooms = useMemo<Room[]>(() => {
     const roomOccupancy = new Map<string, { occupied: number; total: number }>();
     derivedBeds.forEach((bed) => {
       const entry = roomOccupancy.get(bed.roomId) ?? { occupied: 0, total: 0 };
@@ -75,7 +75,7 @@ export function AdmissionsPage() {
       roomOccupancy.set(bed.roomId, entry);
     });
 
-    return rooms.map((room) => {
+    return rooms.map((room): Room => {
       const occupancy = roomOccupancy.get(room.id);
       const isFull = occupancy ? occupancy.occupied >= occupancy.total && occupancy.total > 0 : false;
       return {

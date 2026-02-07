@@ -3,7 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 // Standard Lucide imports
 import { 
   LayoutDashboard, 
-  Activity, 
+  Stethoscope,
   UserPlus, 
   ClipboardList, 
   MessageSquare, 
@@ -38,7 +38,7 @@ export function Layout({ children, pageTitle }: { children: React.ReactNode; pag
 
   const navItems = [
     { path: '/doctor-dashboard', label: 'Unit Overview', icon: LayoutDashboard },
-    { path: '/monitor', label: 'Patient Monitor', icon: Activity },
+    { path: '/triage-board', label: 'Triage Board', icon: Stethoscope },
     { path: '/admissions', label: 'Admissions & Placement', icon: UserPlus },
     { path: '/tasks', label: 'Tasks', icon: ClipboardList },
     { path: '/messages', label: 'Patient Messages', icon: MessageSquare, badge: unreadMessages },

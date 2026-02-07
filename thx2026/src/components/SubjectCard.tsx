@@ -18,7 +18,7 @@ function formatLastSeen(ts: number) {
 export function SubjectCard({ subject, relayState, selected, onSelect }: SubjectCardProps) {
   const roomBedLabel =
     subject.roomLabel
-      ? `Room ${subject.roomLabel}${subject.bedLabel ? ` · Bed ${subject.bedLabel}` : ''}`
+      ? `Room ${subject.roomLabel}${subject.bedLabel ? ` - Bed ${subject.bedLabel}` : ''}`
       : 'No room assigned';
 
   return (
@@ -56,3 +56,4 @@ export function SubjectCard({ subject, relayState, selected, onSelect }: Subject
     </button>
   );
 }
+

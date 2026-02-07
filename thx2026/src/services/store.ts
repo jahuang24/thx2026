@@ -28,12 +28,11 @@ class Store {
   cvEvents: CVEvent[] = [...seedCvEvents];
   tasks: Task[] = [...seedTasks];
   messages: Message[] = [];
-  private pollingId: number | null = null;
 
   constructor() {
     if (typeof window === 'undefined') return;
     void this.refreshMessages();
-    this.pollingId = window.setInterval(() => {
+    window.setInterval(() => {
       void this.refreshMessages();
     }, 5000);
   }

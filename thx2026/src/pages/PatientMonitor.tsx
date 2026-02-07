@@ -4,7 +4,7 @@ import { AgentFeedPanel } from '../components/AgentFeedPanel';
 import { PatientTrackerPanel } from '../components/PatientTrackerPanel';
 import { AutonomousRelayAgent } from '../agent/autonomousRelayAgent';
 import { startMonitorSession, type MonitorSession } from '../monitor/mediapipe';
-import { beds, rooms } from '../data/mock';
+import { beds, patients, rooms } from '../data/mock';
 import { useMonitorStore } from '../store/monitorStore';
 import type { CalibrationProfile, MonitorEvent, MonitorEventType, PatientSubject, RollingMetricsSnapshot } from '../types/monitor';
 import { fetchPatientById, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
@@ -39,6 +39,39 @@ function averageMetric(samples: RollingMetricsSnapshot[], field: keyof RollingMe
 
 function updateSubject(subject: PatientSubject, updates: Partial<PatientSubject>): PatientSubject {
   return { ...subject, ...updates };
+}
+
+function buildSubjectsFromAssignments(): PatientSubject[] {
+  const occupiedBeds = beds.filter((bed) => bed.occupied);
+  if (!occupiedBeds.length) {
+    return [
+      {
+        id: 'S-001',
+        label: 'Subject A',
+        status: 'INACTIVE',
+        lastSeenAt: 0,
+        latestMetrics: zeroMetrics,
+        latestObservedSignals: [],
+        roomLabel: null,
+        bedLabel: null
+      }
+    ];
+  }
+
+  return occupiedBeds.map((bed, index) => {
+    const room = rooms.find((item) => item.id === bed.roomId);
+    const patient = bed.patientId ? patients.find((item) => item.id === bed.patientId) : undefined;
+    return {
+      id: patient?.id ?? `S-${String(index + 1).padStart(3, '0')}`,
+      label: patient?.name ?? `Subject ${String.fromCharCode(65 + index)}`,
+      status: 'INACTIVE' as const,
+      lastSeenAt: 0,
+      latestMetrics: zeroMetrics,
+      latestObservedSignals: [],
+      roomLabel: room?.roomNumber ?? null,
+      bedLabel: bed.bedLabel ?? null
+    };
+  });
 }
 
 export function PatientMonitorPage() {
@@ -353,6 +386,14 @@ export function PatientMonitorPage() {
   }, [patientId]);
 
   useEffect(() => {
+    if (patientId || state.subjects.length > 0) {
+      return;
+    }
+    const seededSubjects = buildSubjectsFromAssignments();
+    actions.setSubjects(seededSubjects, seededSubjects[0]?.id);
+  }, [actions, patientId, state.subjects.length]);
+
+  useEffect(() => {
     if (!patient || !patient.id) {
       return;
     }
@@ -413,11 +454,11 @@ export function PatientMonitorPage() {
             {patient ? (
               <div className="mt-2 space-y-1 text-sm text-ink-600">
                 <div>
-                  {patient.name ?? 'Patient'} · MRN {patient.mrn || 'Unknown'}
+                  {patient.name ?? 'Patient'} - MRN {patient.mrn || 'Unknown'}
                 </div>
                 <div>
                   {assignedRoom
-                    ? `Room ${assignedRoom.roomNumber}${assignedBed ? ` · Bed ${assignedBed.bedLabel}` : ''}`
+                    ? `Room ${assignedRoom.roomNumber}${assignedBed ? ` - Bed ${assignedBed.bedLabel}` : ''}`
                     : 'No room assigned'}
                 </div>
               </div>
@@ -550,3 +591,4 @@ export function PatientMonitorPage() {
     </div>
   );
 }
+

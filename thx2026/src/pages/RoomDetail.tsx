@@ -1,11 +1,13 @@
-import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { AlertList } from '../components/AlertList';
 import { StatusPill } from '../components/StatusPill';
 import { alerts, beds, cvEvents, rooms, tasks } from '../data/mock';
+import { fetchPatients, type PatientRecord } from '../services/patientApi';
 
 export function RoomDetailPage() {
   const { roomId } = useParams();
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
   const room = rooms.find((item) => item.id === roomId);
   const roomBeds = beds.filter((bed) => bed.roomId === roomId);
 
@@ -13,19 +15,56 @@ export function RoomDetailPage() {
   const roomEvents = cvEvents.filter((event) => event.roomId === roomId);
   const roomAlerts = alerts.filter((alert) => alert.roomId === roomId);
 
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const result = await fetchPatients();
+      if (active) {
+        setPatients(result);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const patientByBedId = useMemo(() => {
+    const map = new Map<string, PatientRecord>();
+    for (const patient of patients) {
+      if (patient.bedId) {
+        map.set(patient.bedId, patient);
+      }
+    }
+    return map;
+  }, [patients]);
+
+  const patientById = useMemo(() => {
+    const map = new Map<string, PatientRecord>();
+    for (const patient of patients) {
+      map.set(patient.id, patient);
+    }
+    return map;
+  }, [patients]);
+
+  const roomBedsWithOccupants = useMemo(
+    () =>
+      roomBeds.map((bed) => {
+        const occupant = patientByBedId.get(bed.id) ?? (bed.patientId ? patientById.get(bed.patientId) : undefined);
+        return {
+          bed,
+          occupant,
+          occupied: Boolean(occupant) || bed.occupied
+        };
+      }),
+    [patientByBedId, patientById, roomBeds]
+  );
+
   const timeline = useMemo(() => {
     return [
       {
-        label: 'EVS cleaning in progress',
+        label: 'ADD ROOM TIMELINE ITEMS',
         time: '2h ago'
-      },
-      {
-        label: 'Maintenance flagged: bed rail',
-        time: '4h ago'
-      },
-      {
-        label: 'Patient discharged',
-        time: '8h ago'
       }
     ];
   }, []);
@@ -70,16 +109,28 @@ export function RoomDetailPage() {
           <div className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-panel">
             <h3 className="text-lg font-display font-semibold text-ink-900">Beds</h3>
             <div className="mt-4 space-y-3">
-              {roomBeds.map((bed) => (
+              {roomBedsWithOccupants.map(({ bed, occupant, occupied }) => (
                 <div key={bed.id} className="rounded-xl border border-ink-100 bg-ink-50/40 p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-ink-900">Bed {bed.bedLabel}</p>
-                      <p className="text-xs text-ink-500">{bed.occupied ? 'Occupied' : 'Available'}</p>
+                      <p className="text-xs text-ink-500">{occupied ? 'Occupied' : 'Available'}</p>
+                      {occupant ? (
+                        <p className="text-xs text-ink-600">Patient: {occupant.name || occupant.mrn}</p>
+                      ) : null}
                     </div>
-                    <button className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700">
-                      {bed.occupied ? 'View patient' : 'Assign'}
-                    </button>
+                    {occupant ? (
+                      <Link
+                        to={`/patients/${occupant.id}`}
+                        className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700"
+                      >
+                        View patient
+                      </Link>
+                    ) : (
+                      <button className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700">
+                        Assign
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

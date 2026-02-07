@@ -6,6 +6,7 @@ import { alerts as seedAlerts, beds, rooms } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 import { fetchPatients, type PatientRecord } from '../services/patientApi';
+import type { Room } from '../types';
 
 export function DoctorDashboard() {
   const [liveAlerts, setLiveAlerts] = useState(seedAlerts);
@@ -78,7 +79,7 @@ export function DoctorDashboard() {
     return nextBeds;
   }, [patients]);
 
-  const derivedRooms = useMemo(() => {
+  const derivedRooms = useMemo<Room[]>(() => {
     const roomOccupancy = new Map<string, { occupied: number; total: number }>();
     derivedBeds.forEach((bed) => {
       const entry = roomOccupancy.get(bed.roomId) ?? { occupied: 0, total: 0 };
@@ -87,7 +88,7 @@ export function DoctorDashboard() {
       roomOccupancy.set(bed.roomId, entry);
     });
 
-    return rooms.map((room) => {
+    return rooms.map((room): Room => {
       const occupancy = roomOccupancy.get(room.id);
       const isFull = occupancy ? occupancy.occupied >= occupancy.total && occupancy.total > 0 : false;
       return {
