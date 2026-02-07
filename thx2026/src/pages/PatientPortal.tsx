@@ -14,7 +14,7 @@ type Mode = 'WAITING' | 'CAPTURING';
 type MicState = 'idle' | 'listening' | 'blocked' | 'unsupported' | 'error';
 
 const WAKE_WORD = 'baymax';
-const SILENCE_MS = 1200;
+const SILENCE_MS = 700;
 
 export function PatientPortalPage() {
   const { rooms, beds } = useFacilityData();
@@ -33,6 +33,7 @@ export function PatientPortalPage() {
   const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const shouldRunRef = useRef(false);
   const wakeIndexRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
@@ -40,6 +41,8 @@ export function PatientPortalPage() {
   const capturedRef = useRef('');
   const sendToNurseRef = useRef(false);
   const awaitingNurseMessageRef = useRef(false);
+  const dispatchingCaptureRef = useRef(false);
+  const voiceQuotaExceededRef = useRef(false);
 
   const navigate = useNavigate();
   const patient = getPatientSession();
@@ -156,36 +159,87 @@ export function PatientPortalPage() {
     clearSilenceTimer();
   };
 
+  const resumeMicAfterSpeech = () => {
+    shouldRunRef.current = micEnabled;
+    if (!micEnabled) return;
+    try {
+      recognitionRef.current?.start?.();
+    } catch {}
+  };
+
   const speak = async (text: string) => {
     shouldRunRef.current = false;
     try {
       recognitionRef.current?.stop?.();
     } catch {}
 
+    const safeText = text?.trim() || 'I am here with you.';
+
     try {
-      const response = await fetch(`${API_BASE}/patients/speak`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Pass voiceId here
-        body: JSON.stringify({ text, voiceId }) 
-      });
+      if (voiceQuotaExceededRef.current) {
+        throw Object.assign(new Error('Baymax voice quota exceeded'), { code: 'VOICE_QUOTA_EXCEEDED' });
+      }
 
-      if (!response.ok) throw new Error("Voice failed");
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      audio.onended = () => {
-        shouldRunRef.current = micEnabled;
-        if (micEnabled) recognitionRef.current?.start?.();
-        URL.revokeObjectURL(audioUrl);
+      const requestVoiceAudio = async (selectedVoiceId: string) => {
+        const response = await fetch(`${API_BASE}/patients/speak`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: safeText, voiceId: selectedVoiceId })
+        });
+        if (!response.ok) {
+          const raw = await response.text();
+          let parsed: any = null;
+          try {
+            parsed = raw ? JSON.parse(raw) : null;
+          } catch {}
+          const err = Object.assign(
+            new Error(parsed?.message || raw || 'Voice failed'),
+            { code: parsed?.code || `HTTP_${response.status}` }
+          );
+          throw err;
+        }
+        return response.blob();
       };
 
-      await audio.play();
+      let audioBlob: Blob;
+      try {
+        audioBlob = await requestVoiceAudio(voiceId);
+      } catch {
+        audioBlob = await requestVoiceAudio('5e3JKXK83vvgQqBcdUol');
+      }
+      if (!audioBlob.size || !audioBlob.type.includes('audio')) {
+        throw new Error('Invalid audio payload');
+      }
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = 1;
+      audio.preload = 'auto';
+
+      await new Promise<void>((resolve, reject) => {
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          activeAudioRef.current = null;
+          resolve();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(audioUrl);
+          activeAudioRef.current = null;
+          reject(new Error('Audio playback failed'));
+        };
+        void audio.play().catch(reject);
+      });
     } catch (err) {
-      console.error("Speech Error:", err);
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      console.error('Speech Error:', err);
+      const code = (err as any)?.code;
+      if (code === 'VOICE_QUOTA_EXCEEDED') {
+        voiceQuotaExceededRef.current = true;
+        setBaymaxError('Baymax voice credits are exhausted. Baymax will reply in text until credits are refilled.');
+      } else {
+        setBaymaxError('Voice service unavailable. Baymax replied in text only.');
+      }
+    } finally {
+      resumeMicAfterSpeech();
     }
   };
 
@@ -219,30 +273,25 @@ export function PatientPortalPage() {
       });
       if (!response.ok) {
         setBaymaxError('Unable to reach Baymax right now.');
-        speak('I am having trouble connecting right now. Please try again.');
+        await speak('I am having trouble connecting right now. Please try again.');
         return;
       }
       const data = await response.json();
-      const reply = data.reply ?? '';
+      const reply = (data.reply ?? '').trim() || 'I am here. How can I help you further?';
       setBaymaxReply(reply);
-      speak(reply);
+      await speak(reply);
       await sendExchangeToNurse(question, reply);
-      window.setTimeout(() => {
-        shouldRunRef.current = micEnabled;
-        try {
-          recognitionRef.current?.start?.();
-        } catch {}
-      }, 1200);
     } catch {
       setBaymaxError('Unable to reach Baymax right now.');
-      speak('I am having trouble connecting right now. Please try again.');
+      await speak('I am having trouble connecting right now. Please try again.');
     }
   };
 
-  const scheduleSend = () => {
-    clearSilenceTimer();
-    silenceTimerRef.current = window.setTimeout(async () => {
-      if (modeRef.current !== 'CAPTURING') return;
+  const dispatchCapturedMessage = async () => {
+    if (dispatchingCaptureRef.current) return;
+    if (modeRef.current !== 'CAPTURING') return;
+    dispatchingCaptureRef.current = true;
+    try {
       const payload = capturedRef.current;
       const normalizedPayload = payload.trim();
       const shouldSendToNurse = sendToNurseRef.current || awaitingNurseMessageRef.current;
@@ -250,7 +299,7 @@ export function PatientPortalPage() {
       awaitingNurseMessageRef.current = false;
       resetCapture();
       if (!normalizedPayload) {
-        setError('I heard “baymax”, but did not catch a request. Try again.');
+        setError('I heard baymax, but did not catch a request. Try again.');
         return;
       }
       if (shouldSendToNurse) {
@@ -265,7 +314,16 @@ export function PatientPortalPage() {
         } catch {}
         return;
       }
-      void askBaymax(normalizedPayload);
+      await askBaymax(normalizedPayload);
+    } finally {
+      dispatchingCaptureRef.current = false;
+    }
+  };
+
+  const scheduleSend = () => {
+    clearSilenceTimer();
+    silenceTimerRef.current = window.setTimeout(() => {
+      void dispatchCapturedMessage();
     }, SILENCE_MS);
   };
 
@@ -355,10 +413,16 @@ export function PatientPortalPage() {
       }
 
       if (modeRef.current === 'CAPTURING') {
+        const latestResult = event.results[event.results.length - 1];
         const message = latestChunk.trim();
         setLiveTranscript(combined);
         setCaptured(message);
         capturedRef.current = message;
+        if (latestResult?.isFinal) {
+          clearSilenceTimer();
+          void dispatchCapturedMessage();
+          return;
+        }
         scheduleSend();
       }
     };
@@ -799,3 +863,4 @@ export function PatientPortalPage() {
     </div>
   );
 }
+
