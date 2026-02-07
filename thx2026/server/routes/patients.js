@@ -3,11 +3,17 @@ import { getDb } from "../db/connection.js";
 import { ObjectId } from "mongodb";
 import pdfParse from "pdf-parse";
 import crypto from "crypto";
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { Readable } from "stream";
 
 const router = express.Router();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
 const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
+
+const elevenlabs = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY, 
+});
 
 const chunkText = (text, size = 1200) => {
   if (!text) return [];
@@ -86,6 +92,29 @@ async function chatResponse(system, user) {
   const data = await response.json();
   return data.choices?.[0]?.message?.content ?? "";
 }
+
+router.post("/speak", async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    const audioStream = await elevenlabs.textToSpeech.convert("pFZP5JQG7iQjIQuC4Bku", {
+      text: text,
+      model_id: "eleven_multilingual_v2",
+      output_format: "mp3_44100_128",
+    });
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Transfer-Encoding": "chunked",
+    });
+
+    Readable.fromWeb(audioStream).pipe(res);
+
+  } catch (err) {
+    console.error("ElevenLabs Error:", err);
+    res.status(500).send("Speech synthesis failed");
+  }
+});
 
 // Login or first-time registration
 router.post("/login", async (req, res) => {
