@@ -9,7 +9,9 @@ type EventName =
   | 'taskUpdated'
   | 'newMessage'
   | 'messageUpdated'
-  | 'cvEventIngested';
+  | 'cvEventIngested'
+  | 'roomsUpdated'
+  | 'bedsUpdated';
 
 class RealtimeBus {
   private target = new EventTarget();

@@ -55,7 +55,8 @@ export interface Patient {
   fallRisk: boolean;
   notes?: string;
   unitId: string;
-  bedId?: string;
+  roomId?: string | null;
+  bedId?: string | null;
 }
 
 export interface Admission {
