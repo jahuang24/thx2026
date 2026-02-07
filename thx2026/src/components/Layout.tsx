@@ -24,7 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const navItems = [
-    { path: '/', label: 'Unit Overview' },
+    { path: '/doctor-dashboard', label: 'Unit Overview' },
     { path: '/admissions', label: 'Admissions & Placement' },
     { path: '/tasks', label: 'Tasks' },
     { path: '/messages', label: 'Patient Messages', badge: unreadMessages },
@@ -37,7 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen">
         <aside className="w-72 border-r border-white/70 bg-white/80 backdrop-blur">
           <div className="p-6">
-            <Link to="/" className="text-xl font-display font-semibold text-ink-900">
+            <Link to="/doctor-dashboard" className="text-xl font-display font-semibold text-ink-900">
               Hospital Flow
             </Link>
             <p className="mt-1 text-xs uppercase tracking-[0.25em] text-ink-400">Flow Command</p>

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "cd server && node --env-file=config.env server",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

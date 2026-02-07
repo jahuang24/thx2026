@@ -6,7 +6,7 @@ import { alerts as seedAlerts, beds, patients, rooms } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 
-export function OverviewPage() {
+export function DoctorDashboard() {
   const [liveAlerts, setLiveAlerts] = useState(seedAlerts);
   const [messages, setMessages] = useState(store.messages);
 
