@@ -1,3 +1,5 @@
+
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { patients } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
@@ -13,6 +15,7 @@ const WAKE_WORD = 'baymax';
 const SILENCE_MS = 1200;
 
 export function PatientPortalPage() {
+
   const [micState, setMicState] = useState<MicState>('idle');
   const [mode, setMode] = useState<Mode>('WAITING');
   const [captured, setCaptured] = useState('');
@@ -53,19 +56,22 @@ export function PatientPortalPage() {
     clearSilenceTimer();
   };
 
-  const sendToDoctor = (message: string) => {
+  const sendToDoctor = async (message: string) => {
     const trimmed = message.trim();
     if (!trimmed || !patient?.id) return false;
-    store.sendPatientMessage(patient.id, trimmed);
-    setMessages([...store.messages]);
-    return true;
+    const sent = await store.sendPatientMessage(patient.id, trimmed);
+    if (sent) {
+      setMessages([...store.messages]);
+      return true;
+    }
+    return false;
   };
 
   const scheduleSend = () => {
     clearSilenceTimer();
-    silenceTimerRef.current = window.setTimeout(() => {
+    silenceTimerRef.current = window.setTimeout(async () => {
       if (modeRef.current !== 'CAPTURING') return;
-      const sent = sendToDoctor(capturedRef.current);
+      const sent = await sendToDoctor(capturedRef.current);
       resetCapture();
       if (!sent) {
         setError('I heard “baymax”, but no message followed. Try again.');

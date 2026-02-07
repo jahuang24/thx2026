@@ -22,7 +22,7 @@ export function MessagesPage() {
 
   useEffect(() => {
     if (activePatientId) {
-      store.markThreadReadByNurse(activePatientId);
+      void store.markThreadReadByNurse(activePatientId);
       setMessages([...store.messages]);
     }
   }, [activePatientId]);
@@ -52,11 +52,13 @@ export function MessagesPage() {
     });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!activePatientId || !draft.trim()) return;
-    store.sendNurseMessage(activePatientId, draft.trim());
-    setDraft('');
-    setMessages([...store.messages]);
+    const sent = await store.sendNurseMessage(activePatientId, draft.trim());
+    if (sent) {
+      setDraft('');
+      setMessages([...store.messages]);
+    }
   };
 
   return (
