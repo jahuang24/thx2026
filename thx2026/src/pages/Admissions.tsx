@@ -2,10 +2,16 @@ import { useMemo, useState, useEffect } from 'react';
 import { beds, rooms } from '../data/mock';
 import { recommendBeds } from '../logic/recommendation';
 import type { RecommendationScore, Room } from '../types';
-import { fetchPatients, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
+import {
+  fetchPatients,
+  getCachedPatients,
+  updatePatientAssignment,
+  type PatientRecord
+} from '../services/patientApi';
 import {
   ensureAdmissionsQueue,
   fetchAdmissions,
+  getCachedAdmissions,
   updateAdmissionStatus,
   type AdmissionRecord
 } from '../services/admissionsApi';
@@ -16,12 +22,21 @@ export function AdmissionsPage() {
   const [recommendations, setRecommendations] = useState<RecommendationScore[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [assigningBedId, setAssigningBedId] = useState<string | null>(null);
+  const [loadingAdmissions, setLoadingAdmissions] = useState(true);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const result = await fetchPatients();
-      if (active) setPatients(result);
+      const cached = getCachedPatients();
+      if (cached?.length) {
+        setPatients(cached);
+      }
+      try {
+        const result = await fetchPatients({ force: true, timeoutMs: 8000 });
+        if (active) setPatients(result);
+      } catch {
+        return;
+      }
     };
     void load();
     return () => {
@@ -32,12 +47,31 @@ export function AdmissionsPage() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      await ensureAdmissionsQueue();
-      const result = await fetchAdmissions();
+      const cached = getCachedAdmissions();
+      if (cached?.length) {
+        setAdmissions(cached);
+        if (!selectedAdmission) {
+          setSelectedAdmission(cached[0]);
+        }
+        setLoadingAdmissions(false);
+      }
+      const result = await fetchAdmissions({ force: true, timeoutMs: 8000 });
       if (active) {
         setAdmissions(result);
         if (!selectedAdmission && result.length) {
           setSelectedAdmission(result[0]);
+        }
+        setLoadingAdmissions(false);
+      }
+      if (active && result.length === 0) {
+        await ensureAdmissionsQueue({ timeoutMs: 8000 });
+        const refreshed = await fetchAdmissions({ force: true, timeoutMs: 8000 });
+        if (active) {
+          setAdmissions(refreshed);
+          if (!selectedAdmission && refreshed.length) {
+            setSelectedAdmission(refreshed[0]);
+          }
+          setLoadingAdmissions(false);
         }
       }
     };
@@ -110,7 +144,10 @@ export function AdmissionsPage() {
     });
     if (success) {
       await updateAdmissionStatus(admission.id, { admitStatus: 'ASSIGNED', assignedAt });
-      const [nextAdmissions, nextPatients] = await Promise.all([fetchAdmissions(), fetchPatients()]);
+      const [nextAdmissions, nextPatients] = await Promise.all([
+        fetchAdmissions({ force: true, timeoutMs: 8000 }),
+        fetchPatients({ force: true, timeoutMs: 8000 })
+      ]);
       setAdmissions(nextAdmissions);
       setPatients(nextPatients);
       setRecommendations([]);
@@ -133,28 +170,38 @@ export function AdmissionsPage() {
             <span className="text-xs text-ink-400">{pendingAdmissions.length} waiting</span>
           </div>
           <div className="mt-4 space-y-3">
-            {pendingAdmissions.map((admission) => {
-              const patient = patients.find((item) => item.id === admission.patientId);
-              return (
-                <button
-                  key={admission.id}
-                  onClick={() => handleRecommend(admission)}
-                  className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-                    selectedAdmission?.id === admission.id
-                      ? 'border-ink-900 bg-ink-900 text-white'
-                      : 'border-ink-100 bg-white/90 text-ink-900 hover:border-ink-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">{patient?.name ?? 'Patient'}</p>
-                      <p className="text-xs opacity-80">Request: {admission.requestedType}</p>
+            {loadingAdmissions ? (
+              <div className="rounded-xl border border-dashed border-ink-200 bg-white/80 p-4 text-sm text-ink-500">
+                Loading admissions...
+              </div>
+            ) : pendingAdmissions.length ? (
+              pendingAdmissions.map((admission) => {
+                const patient = patients.find((item) => item.id === admission.patientId);
+                return (
+                  <button
+                    key={admission.id}
+                    onClick={() => handleRecommend(admission)}
+                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                      selectedAdmission?.id === admission.id
+                        ? 'border-ink-900 bg-ink-900 text-white'
+                        : 'border-ink-100 bg-white/90 text-ink-900 hover:border-ink-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">{patient?.name ?? 'Patient'}</p>
+                        <p className="text-xs opacity-80">Request: {admission.requestedType}</p>
+                      </div>
+                      <span className="text-xs">{new Date(admission.requestedAt).toLocaleTimeString()}</span>
                     </div>
-                    <span className="text-xs">{new Date(admission.requestedAt).toLocaleTimeString()}</span>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="rounded-xl border border-dashed border-ink-200 bg-white/80 p-4 text-sm text-ink-500">
+                No pending admissions.
+              </div>
+            )}
           </div>
         </section>
 

@@ -50,32 +50,27 @@ router.post("/queue/ensure", async (req, res) => {
     const patients = db.collection("Patients");
     const admissions = db.collection("Admissions");
 
-    const patientList = await patients.find({}).toArray();
-    const queued = [];
-    for (const patient of patientList) {
-      const patientId = String(patient._id);
-      const existingAdmissions = await admissions
-        .find({ patientId: { $in: [patientId, patient._id] } })
-        .sort({ requestedAt: -1 })
-        .toArray();
-      if (existingAdmissions.length) {
-        if (existingAdmissions.length > 1) {
-          const idsToDelete = existingAdmissions.slice(1).map((item) => item._id);
-          if (idsToDelete.length) {
-            await admissions.deleteMany({ _id: { $in: idsToDelete } });
-          }
-        }
-        continue;
-      }
-      const admission = {
-        patientId,
-        requestedType: "MED_SURG",
-        requestedUnit: "MED-SURG",
-        admitStatus: "PENDING",
-        requestedAt: new Date().toISOString()
-      };
-      await admissions.insertOne(admission);
-      queued.push(admission);
+    const patientList = await patients.find({}, { projection: { _id: 1 } }).toArray();
+    const patientIds = patientList.map((patient) => String(patient._id));
+
+    const existing = await admissions
+      .aggregate([
+        { $addFields: { patientIdStr: { $toString: "$patientId" } } },
+        { $group: { _id: "$patientIdStr" } }
+      ])
+      .toArray();
+    const existingIds = new Set(existing.map((item) => String(item._id)));
+
+    const missing = patientIds.filter((id) => !existingIds.has(id));
+    const queued = missing.map((patientId) => ({
+      patientId,
+      requestedType: "MED_SURG",
+      requestedUnit: "MED-SURG",
+      admitStatus: "PENDING",
+      requestedAt: new Date().toISOString()
+    }));
+    if (queued.length) {
+      await admissions.insertMany(queued);
     }
 
     res.status(200).send({ created: queued.length });

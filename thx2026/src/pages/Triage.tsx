@@ -4,7 +4,7 @@ import { TriageDedalusClient, type TriageSuggestion } from '../agent/triageDedal
 import { alerts, beds, patients as seededPatients, rooms } from '../data/mock';
 import { buildTriageEntries, getTriagePalette, type TriageEntry, type TriageLevel } from '../logic/triage';
 import { realtimeBus } from '../services/realtime';
-import { fetchPatients, type PatientRecord } from '../services/patientApi';
+import { fetchPatients, getCachedPatients, type PatientRecord } from '../services/patientApi';
 import { store } from '../services/store';
 
 type FilterLevel = 'ALL' | TriageLevel;
@@ -64,6 +64,7 @@ export function TriagePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<FilterLevel>('ALL');
   const [loading, setLoading] = useState(true);
+  const [timedOut, setTimedOut] = useState(false);
   const [dedalusSuggestions, setDedalusSuggestions] = useState<Record<string, TriageSuggestion>>({});
   const [dedalusState, setDedalusState] = useState<DedalusState>('OFF');
   const dedalusRef = useRef(new TriageDedalusClient());
@@ -71,16 +72,36 @@ export function TriagePage() {
 
   useEffect(() => {
     let active = true;
+    const timeoutId = window.setTimeout(() => {
+      if (!active) return;
+      setTimedOut(true);
+      setLoading(false);
+    }, 4000);
     const load = async () => {
-      const result = await fetchPatients();
-      if (active) {
-        setPatients(result);
+      const cached = getCachedPatients();
+      if (cached?.length) {
+        setPatients(cached);
         setLoading(false);
+      }
+      try {
+        const result = await fetchPatients({ force: true, timeoutMs: 8000 });
+        if (active) {
+          setPatients(result);
+          setLoading(false);
+          setTimedOut(false);
+        }
+      } catch {
+        if (active) {
+          setLoading(false);
+        }
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     };
     void load();
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
     };
   }, []);
 
@@ -310,7 +331,24 @@ export function TriagePage() {
         <section className="grid gap-4 lg:grid-cols-2">{filteredEntries.map(renderCard)}</section>
       ) : (
         <div className="rounded-2xl border border-dashed border-ink-200 bg-white/70 p-6 text-sm text-ink-500">
-          No patients match the current filter.
+          {timedOut ? (
+            <div className="space-y-3">
+              <p>Patient list is taking longer than expected. Showing what we have.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  setTimedOut(false);
+                  void fetchPatients({ force: true, timeoutMs: 8000 }).then(setPatients).finally(() => setLoading(false));
+                }}
+                className="rounded-full border border-ink-200 bg-white px-4 py-2 text-xs font-semibold text-ink-700"
+              >
+                Retry Load
+              </button>
+            </div>
+          ) : (
+            <p>No patients match the current filter.</p>
+          )}
         </div>
       )}
     </div>

@@ -370,6 +370,32 @@
   border-radius: 999px;
 }
 
+.chat-bubble {
+  border-radius: 18px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.chat-bubble--nurse {
+  color: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.6);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.96));
+}
+
+.chat-bubble--patient {
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.3);
+  background: linear-gradient(180deg, rgba(248, 249, 252, 0.98), rgba(234, 238, 244, 0.92));
+}
+
+.chat-bubble__meta--nurse {
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.chat-bubble__meta--patient {
+  color: rgba(71, 85, 105, 0.7);
+}
+
 .creative-grid {
   position: relative;
   z-index: 1;

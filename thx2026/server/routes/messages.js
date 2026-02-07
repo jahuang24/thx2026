@@ -14,10 +14,12 @@ router.get("/", async (req, res) => {
     if (patientId) query.patientId = String(patientId);
     if (sender) query.sender = String(sender);
 
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 200));
+
     const results = await collection
       .find(query)
       .sort({ sentAt: -1 })
-      .limit(200)
+      .limit(limit)
       .toArray();
 
     res.status(200).send(results);

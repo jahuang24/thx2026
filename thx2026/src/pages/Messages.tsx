@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { fetchPatients, type PatientRecord } from '../services/patientApi';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { fetchPatients, getCachedPatients, type PatientRecord } from '../services/patientApi';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 
@@ -11,6 +11,7 @@ export function MessagesPage() {
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [activePatientId, setActivePatientId] = useState<string>('');
   const [draft, setDraft] = useState('');
+  const threadRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
@@ -24,11 +25,25 @@ export function MessagesPage() {
   useEffect(() => {
     let active = true;
     const loadPatients = async () => {
-      const result = await fetchPatients();
-      if (!active) return;
-      setPatients(result);
-      if (!activePatientId && result.length) {
-        setActivePatientId(result[0].id);
+      const cached = getCachedPatients();
+      if (cached?.length) {
+        setPatients(cached);
+        if (!activePatientId) {
+          setActivePatientId(cached[0].id);
+        }
+      }
+      try {
+        const result = await fetchPatients({ force: true, timeoutMs: 8000 });
+        if (!active) return;
+        setPatients(result);
+        if (!activePatientId && result.length) {
+          setActivePatientId(result[0].id);
+        }
+      } catch {
+        if (!active) return;
+        if (!activePatientId && cached?.length) {
+          setActivePatientId(cached[0].id);
+        }
       }
     };
     void loadPatients();
@@ -53,19 +68,35 @@ export function MessagesPage() {
       .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
   }, [messages, activePatientId]);
 
+  useLayoutEffect(() => {
+    const container = threadRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+  }, [thread.length, activePatientId]);
+
   const unreadCount = useMemo(
     () => messages.filter((message) => message.sender === 'PATIENT' && !message.readByNurse).length,
     [messages]
   );
 
   const patientsWithMeta = useMemo(() => {
+    const metaByPatient = new Map<
+      string,
+      { lastMessage: typeof messages[number] | undefined; unread: number }
+    >();
+    messages.forEach((message) => {
+      const existing = metaByPatient.get(message.patientId) ?? { lastMessage: undefined, unread: 0 };
+      if (!existing.lastMessage) {
+        existing.lastMessage = message;
+      }
+      if (message.sender === 'PATIENT' && !message.readByNurse) {
+        existing.unread += 1;
+      }
+      metaByPatient.set(message.patientId, existing);
+    });
     return patients.map((patient) => {
-      const patientMessages = messages.filter((message) => message.patientId === patient.id);
-      const lastMessage = patientMessages[0];
-      const unread = patientMessages.filter(
-        (message) => message.sender === 'PATIENT' && !message.readByNurse
-      ).length;
-      return { patient, lastMessage, unread };
+      const meta = metaByPatient.get(patient.id);
+      return { patient, lastMessage: meta?.lastMessage, unread: meta?.unread ?? 0 };
     });
   }, [messages, patients]);
 
@@ -147,7 +178,10 @@ export function MessagesPage() {
             </p>
           </div>
 
-          <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-2 scrollbar-thin">
+          <div
+            ref={threadRef}
+            className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-2 scrollbar-thin"
+          >
             {thread.length === 0 ? (
               <div className="rounded-xl border border-dashed border-ink-200 bg-white/80 p-4 text-sm text-ink-500">
                 No messages yet. Send a quick update to start the thread.
@@ -159,16 +193,14 @@ export function MessagesPage() {
                   className={`flex ${message.sender === 'NURSE' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[72%] rounded-2xl px-4 py-3 text-sm shadow-panel ${
-                      message.sender === 'NURSE'
-                        ? 'bg-ink-950 text-white'
-                        : 'bg-white/90 text-ink-800'
+                    className={`chat-bubble max-w-[72%] px-4 py-3 text-sm ${
+                      message.sender === 'NURSE' ? 'chat-bubble--nurse' : 'chat-bubble--patient'
                     }`}
                   >
                     <p>{message.body}</p>
                     <p
                       className={`mt-2 text-[11px] ${
-                        message.sender === 'NURSE' ? 'text-white/70' : 'text-ink-400'
+                        message.sender === 'NURSE' ? 'chat-bubble__meta--nurse' : 'chat-bubble__meta--patient'
                       }`}
                     >
                       {message.sender === 'NURSE' ? 'Nurse' : 'Patient'} • {formatTime(message.sentAt)}
@@ -183,6 +215,12 @@ export function MessagesPage() {
             <textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
+                }
+              }}
               rows={3}
               placeholder="Send reassurance, next steps, or questions."
               className="w-full rounded-2xl border border-ink-200 bg-white/90 px-4 py-3 text-sm text-ink-900 focus:border-ink-400 focus:outline-none"

@@ -232,7 +232,10 @@ router.get("/:id/records", async (req, res) => {
   try {
     const db = getDb();
     const collection = db.collection("Patients");
-    const patient = await collection.findOne({ _id: new ObjectId(req.params.id) });
+    const patient = await collection.findOne(
+      { _id: new ObjectId(req.params.id) },
+      { projection: { medicalRecord: 1 } }
+    );
     if (!patient) {
       res.status(404).send("Not found");
       return;
@@ -246,6 +249,8 @@ router.get("/:id/records", async (req, res) => {
 
 // List all patients
 router.get("/", async (req, res) => {
+  const startedAt = Date.now();
+  const requestId = Math.random().toString(36).slice(2, 8);
   try {
     const db = getDb();
     const collection = db.collection("Patients");
@@ -253,15 +258,26 @@ router.get("/", async (req, res) => {
     // Only return fields needed for list views to keep payloads small and fast.
     const projection = { name: 1, mrn: 1, dob: 1, roomId: 1, bedId: 1, createdAt: 1 };
 
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 200));
+    const skip = (page - 1) * limit;
+
     const results = await collection
       .find({}, { projection })
-      .sort({ createdAt: -1 })
-      .limit(200)
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(limit)
       .toArray();
 
     res.status(200).send(results);
+    const durationMs = Date.now() - startedAt;
+    console.log(
+      `[patients:list:${requestId}] count=${results.length} page=${page} limit=${limit} durationMs=${durationMs}`
+    );
   } catch (err) {
     console.error(err);
+    const durationMs = Date.now() - startedAt;
+    console.log(`[patients:list:${requestId}] failed durationMs=${durationMs}`);
     res.status(500).send("Error fetching patients");
   }
 });
@@ -428,6 +444,7 @@ router.post("/initialize", async (req, res) => {
     // Ensure indexes for faster queries
     await collection.createIndex({ mrn: 1 });
     await collection.createIndex({ _id: 1 });
+    await collection.createIndex({ createdAt: -1 });
 
     res.status(200).send("Indexes created successfully");
   } catch (error) {

@@ -4,6 +4,7 @@ import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 import { clearPatientSession, getPatientSession } from '../services/patientSession';
 import { fetchPatientById, type PatientRecord } from '../services/patientApi';
+import { fetchMessagesForPatient } from '../services/messagesApi';
 import { useFacilityData } from '../hooks/useFacilityData';
 
 type SpeechRecognition = any;
@@ -47,11 +48,21 @@ export function PatientPortalPage() {
   useEffect(() => {
     if (!patient?.id) return;
     let active = true;
+    const timeoutId = window.setTimeout(() => {
+      if (!active) return;
+      setRecordError('Medical record is taking longer than expected.');
+      setRecordLoading(false);
+    }, 4000);
     const fetchRecord = async () => {
       setRecordLoading(true);
       setRecordError(null);
       try {
-        const response = await fetch(`${API_BASE}/patients/${patient.id}/records`);
+        const controller = new AbortController();
+        const requestTimeout = window.setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(`${API_BASE}/patients/${patient.id}/records`, {
+          signal: controller.signal
+        });
+        window.clearTimeout(requestTimeout);
         if (!response.ok) {
           setRecordError('Unable to load medical record.');
           return;
@@ -62,11 +73,13 @@ export function PatientPortalPage() {
         if (active) setRecordError('Unable to reach the server.');
       } finally {
         if (active) setRecordLoading(false);
+        window.clearTimeout(timeoutId);
       }
     };
     void fetchRecord();
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
     };
   }, [API_BASE, patient?.id]);
 
@@ -74,7 +87,9 @@ export function PatientPortalPage() {
     let active = true;
     if (!patient?.id) return () => undefined;
     const loadPatient = async () => {
-      const result = await fetchPatientById(patient.id);
+      const cached = await fetchPatientById(patient.id);
+      if (active) setPatientRecord(cached);
+      const result = await fetchPatientById(patient.id, { force: true, timeoutMs: 8000 });
       if (active) setPatientRecord(result);
     };
     void loadPatient();
@@ -84,13 +99,36 @@ export function PatientPortalPage() {
   }, [patient?.id]);
 
   useEffect(() => {
-    const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
-    const unsubscribeUpdate = realtimeBus.on('messageUpdated', () => setMessages([...store.messages]));
+    const unsubscribeNew = realtimeBus.on('newMessage', () => {
+      if (!patient?.id) return;
+      setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
+    });
+    const unsubscribeUpdate = realtimeBus.on('messageUpdated', () => {
+      if (!patient?.id) return;
+      setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
+    });
     return () => {
       unsubscribeNew();
       unsubscribeUpdate();
     };
-  }, []);
+  }, [patient?.id]);
+
+  useEffect(() => {
+    let active = true;
+    if (!patient?.id) return () => undefined;
+    const seed = store.messages.filter((msg) => msg.patientId === patient.id);
+    if (seed.length) {
+      setMessages(seed);
+    }
+    const load = async () => {
+      const result = await fetchMessagesForPatient(patient.id, { force: true, timeoutMs: 8000 });
+      if (active) setMessages(result);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [patient?.id]);
 
   const clearSilenceTimer = () => {
     if (silenceTimerRef.current) {
@@ -145,7 +183,7 @@ export function PatientPortalPage() {
     if (!trimmed || !patient?.id) return false;
     const sent = await store.sendPatientMessage(patient.id, trimmed);
     if (sent) {
-      setMessages([...store.messages]);
+      setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
       return true;
     }
     return false;
@@ -155,7 +193,7 @@ export function PatientPortalPage() {
     if (!patient?.id) return;
     await store.sendPatientMessage(patient.id, `[Patient → Baymax] ${question}`);
     await store.sendPatientMessage(patient.id, `[Baymax] ${reply}`);
-    setMessages([...store.messages]);
+    setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
   };
 
   const askBaymax = async (question: string) => {
