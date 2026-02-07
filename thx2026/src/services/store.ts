@@ -8,11 +8,62 @@ import {
 import { processCvEvent } from '../logic/cvProcessor';
 import { realtimeBus } from './realtime';
 
+const MESSAGE_STORAGE_KEY = 'thx.messages.v1';
+const MESSAGE_CHANNEL_NAME = 'thx.messages.channel';
+
+const loadStoredMessages = () => {
+  if (typeof localStorage === 'undefined') return [...seedMessages];
+  try {
+    const raw = localStorage.getItem(MESSAGE_STORAGE_KEY);
+    if (!raw) return [...seedMessages];
+    const parsed = JSON.parse(raw) as Message[];
+    return Array.isArray(parsed) ? parsed : [...seedMessages];
+  } catch {
+    return [...seedMessages];
+  }
+};
+
 class Store {
   alerts: Alert[] = [...seedAlerts];
   cvEvents: CVEvent[] = [...seedCvEvents];
   tasks: Task[] = [...seedTasks];
-  messages: Message[] = [...seedMessages];
+  messages: Message[] = loadStoredMessages();
+  private messageChannel: BroadcastChannel | null = null;
+
+  constructor() {
+    if (typeof window === 'undefined') return;
+
+    if ('BroadcastChannel' in window) {
+      this.messageChannel = new BroadcastChannel(MESSAGE_CHANNEL_NAME);
+      this.messageChannel.addEventListener('message', (event) => {
+        const payload = event.data as { type?: string; messages?: Message[] } | null;
+        if (payload?.type === 'messages' && Array.isArray(payload.messages)) {
+          this.messages = payload.messages;
+          realtimeBus.emit('messageUpdated', { source: 'broadcast' });
+        }
+      });
+    }
+
+    window.addEventListener('storage', (event) => {
+      if (event.key !== MESSAGE_STORAGE_KEY || !event.newValue) return;
+      try {
+        const parsed = JSON.parse(event.newValue) as Message[];
+        if (Array.isArray(parsed)) {
+          this.messages = parsed;
+          realtimeBus.emit('messageUpdated', { source: 'storage' });
+        }
+      } catch {
+        return;
+      }
+    });
+  }
+
+  private syncMessages() {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(this.messages));
+    }
+    this.messageChannel?.postMessage({ type: 'messages', messages: this.messages });
+  }
 
   ingestCvEvent(event: CVEvent) {
     this.cvEvents = [event, ...this.cvEvents].slice(0, 50);
@@ -77,6 +128,7 @@ class Store {
       readByPatient: true
     };
     this.messages = [message, ...this.messages];
+    this.syncMessages();
     realtimeBus.emit('newMessage', { message });
     return message;
   }
@@ -92,6 +144,7 @@ class Store {
       readByPatient: false
     };
     this.messages = [message, ...this.messages];
+    this.syncMessages();
     realtimeBus.emit('newMessage', { message });
     return message;
   }
@@ -106,6 +159,7 @@ class Store {
       return message;
     });
     if (changed) {
+      this.syncMessages();
       realtimeBus.emit('messageUpdated', { patientId });
     }
   }
@@ -120,6 +174,7 @@ class Store {
       return message;
     });
     if (changed) {
+      this.syncMessages();
       realtimeBus.emit('messageUpdated', { patientId });
     }
   }

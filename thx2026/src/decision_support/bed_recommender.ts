@@ -1,4 +1,4 @@
-import { shortestPath } from './pathfinding';
+import { shortestPath } from './pathfinding.ts';
 import type {
   BedDS,
   ExcludedCandidate,
@@ -9,7 +9,7 @@ import type {
   RecommendationOutput,
   RoomTypeDS,
   ScoreBreakdown
-} from './types';
+} from './types.ts';
 
 type ResolvedConfig = {
   weights: {

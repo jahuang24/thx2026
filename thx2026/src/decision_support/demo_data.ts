@@ -1,4 +1,4 @@
-import type { BedDS, Coordinate, GridMap, PatientNeeds } from './types';
+import type { BedDS, Coordinate, GridMap, PatientNeeds } from './types.ts';
 
 export const demoGridMap: GridMap = {
   kind: 'grid',

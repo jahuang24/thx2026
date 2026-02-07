@@ -5,7 +5,7 @@ import type {
   GridMap,
   MapInput,
   PathResult
-} from './types';
+} from './types.ts';
 
 interface AStarNode<T> {
   id: string;
@@ -162,6 +162,13 @@ function inBounds(map: GridMap, coord: Coordinate): boolean {
   return coord.x >= 0 && coord.y >= 0 && coord.x < map.width && coord.y < map.height;
 }
 
+function isRestricted(restricted: GridMap['restrictedCells'], key: string) {
+  if (!restricted) return false;
+  if (restricted instanceof Set) return restricted.has(key);
+  if (Array.isArray(restricted)) return (restricted as string[]).includes(key);
+  return false;
+}
+
 function neighbors(map: GridMap, coord: Coordinate) {
   const dirs = [
     { x: 1, y: 0 },
@@ -173,9 +180,9 @@ function neighbors(map: GridMap, coord: Coordinate) {
   for (const d of dirs) {
     const next = { x: coord.x + d.x, y: coord.y + d.y };
     if (!inBounds(map, next)) continue;
-    const cell = map.cells[next.y]?.[next.x];
-    const restricted = cell?.restricted || map.restrictedCells?.has(coordKey(next));
-    if (!cell || !cell.walkable || restricted) {
+    const cell = map.cells?.[next.y]?.[next.x] ?? { walkable: true, weight: 1 };
+    const restricted = cell.restricted || isRestricted(map.restrictedCells, coordKey(next));
+    if (!cell.walkable || restricted) {
       result.push({ coord: next, cost: Infinity, blocked: true });
       continue;
     }
