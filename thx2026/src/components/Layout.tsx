@@ -64,7 +64,7 @@ export function Layout({ children, pageTitle }: { children: React.ReactNode; pag
         }`}>
           <div className="flex h-full flex-col overflow-hidden">
             <div className="p-6">
-              <Link to="/doctor-dashboard" className="flex items-center gap-3 text-xl font-semibold text-ink-900">
+              <Link to="/" className="flex items-center gap-3 text-xl font-semibold text-ink-900">
                 <div className="min-w-[34px] h-9 rounded-2xl bg-ink-950 text-white text-xs flex items-center justify-center tracking-[0.2em]">
                   HF
                 </div>
