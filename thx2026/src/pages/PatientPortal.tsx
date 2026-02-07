@@ -4,7 +4,7 @@ import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 import { clearPatientSession, getPatientSession } from '../services/patientSession';
 import { fetchPatientById, type PatientRecord } from '../services/patientApi';
-import { beds, rooms } from '../data/mock';
+import { useFacilityData } from '../hooks/useFacilityData';
 
 type SpeechRecognition = any;
 
@@ -16,6 +16,7 @@ const WAKE_WORD = 'baymax';
 const SILENCE_MS = 1200;
 
 export function PatientPortalPage() {
+  const { rooms, beds } = useFacilityData();
   const [micState, setMicState] = useState<MicState>('idle');
   const [micEnabled, setMicEnabled] = useState(false);
   const [mode, setMode] = useState<Mode>('WAITING');
@@ -210,13 +211,13 @@ export function PatientPortalPage() {
   const assignedBed = useMemo(() => {
     if (!patientRecord?.bedId) return null;
     return beds.find((bed) => bed.id === patientRecord.bedId) ?? null;
-  }, [patientRecord?.bedId]);
+  }, [beds, patientRecord?.bedId]);
 
   const assignedRoom = useMemo(() => {
     const roomId = patientRecord?.roomId ?? assignedBed?.roomId;
     if (!roomId) return null;
     return rooms.find((room) => room.id === roomId) ?? null;
-  }, [assignedBed?.roomId, patientRecord?.roomId]);
+  }, [assignedBed?.roomId, patientRecord?.roomId, rooms]);
 
   useEffect(() => {
     const SpeechRecognitionApi =
@@ -423,71 +424,76 @@ export function PatientPortalPage() {
 
   if (!patient) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f3f7ff,_#ffffff_55%,_#f7fafc)] px-6 py-12 text-slate-900">
-        <div className="mx-auto max-w-xl rounded-[32px] border border-slate-200 bg-white/90 p-8 shadow-xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
-            Patient Portal
-          </p>
-          <h1 className="mt-4 text-3xl font-semibold text-slate-900">Please sign in</h1>
-          <p className="mt-3 text-sm text-slate-600">
-            Sign in to view your messages and medical record.
-          </p>
-          <button
-            onClick={() => navigate('/patient-login')}
-            className="mt-6 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
-          >
-            Go to sign in
-          </button>
+      <div className="creative-shell text-ink-950">
+        <div className="creative-backdrop" aria-hidden />
+        <div className="relative z-10 min-h-screen px-6 py-12">
+          <div className="mx-auto max-w-xl rounded-[32px] border border-white/70 bg-white/80 p-8 shadow-panel">
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-ink-400">
+              Patient Portal
+            </p>
+            <h1 className="mt-4 text-3xl font-semibold text-ink-900">Please sign in</h1>
+            <p className="mt-3 text-sm text-ink-600">
+              Sign in to view your messages and medical record.
+            </p>
+            <button
+              onClick={() => navigate('/patient-login')}
+              className="mt-6 rounded-full bg-ink-950 px-5 py-3 text-sm font-semibold text-white"
+            >
+              Go to sign in
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f3f7ff,_#ffffff_55%,_#f7fafc)] px-6 py-10 text-slate-900">
-      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
-        <section className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-xl">
+    <div className="creative-shell text-ink-950">
+      <div className="creative-backdrop" aria-hidden />
+      <div className="relative z-10 min-h-screen px-6 py-10">
+        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
+          <section className="rounded-[32px] border border-white/70 bg-white/80 p-7 shadow-panel">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-ink-400">
                 Your Care Assistant
               </p>
-              <h1 className="mt-3 text-3xl font-semibold text-slate-900">
+              <h1 className="mt-3 text-3xl font-semibold text-ink-900">
                 Hello, {patient?.name ?? 'there'}
               </h1>
-              <p className="mt-3 text-base text-slate-600">
+              <p className="mt-3 text-base text-ink-600">
                 Say “baymax”, then speak your message. We will send it to your care team.
               </p>
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-sm text-ink-500">
                 {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room not assigned'}
                 {assignedBed ? ` · Bed ${assignedBed.bedLabel}` : ''}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm text-ink-700">
               {patient.name} · {patient.mrn}
             </div>
           </div>
 
           <div className="mt-6 grid gap-4">
-            <div className="rounded-2xl border border-slate-200 bg-sky-50/70 p-5">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-900">Listening</p>
+                <p className="text-sm font-semibold text-ink-900">Listening</p>
                 <span
                   className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
                     mode === 'WAITING'
-                      ? 'bg-white text-slate-500'
+                      ? 'bg-white text-ink-500'
                       : 'bg-emerald-100 text-emerald-700'
                   }`}
                 >
                   <span
                     className={`h-2 w-2 rounded-full ${
-                      mode === 'WAITING' ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'
+                      mode === 'WAITING' ? 'bg-ink-400' : 'bg-emerald-500 animate-pulse'
                     }`}
                   />
                   {micEnabled ? (mode === 'WAITING' ? 'Ready' : 'Listening') : 'Mic Off'}
                 </span>
               </div>
-              <p className="mt-3 text-base text-slate-700">
+              <p className="mt-3 text-base text-ink-700">
                 {mode === 'WAITING'
                   ? 'Say “baymax” to ask a question. Say “baymax, send a message to the nurse” to send a message.'
                   : 'Pause when finished and we will send it.'}
@@ -496,42 +502,42 @@ export function PatientPortalPage() {
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   onClick={handleEnableMic}
-                  className="rounded-full bg-slate-900 px-5 py-2 text-xs font-semibold text-white"
+                  className="rounded-full bg-ink-950 px-5 py-2 text-xs font-semibold text-white"
                 >
                   Enable microphone
                 </button>
                 <button
                   onClick={handleDisableMic}
-                  className="rounded-full border border-slate-200 bg-white px-5 py-2 text-xs font-semibold text-slate-700"
+                  className="rounded-full border border-white/70 bg-white/80 px-5 py-2 text-xs font-semibold text-ink-700"
                 >
                   Disable microphone
                 </button>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-900">Your Message</p>
-              <p className="mt-3 text-lg font-semibold text-slate-900">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
+              <p className="text-sm font-semibold text-ink-900">Your Message</p>
+              <p className="mt-3 text-lg font-semibold text-ink-900">
                 {captured ? `“${captured}”` : 'No message yet.'}
               </p>
               <button
                 onClick={handleReset}
-                className="mt-4 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700"
+                className="mt-4 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-semibold text-ink-700"
               >
                 Clear
               </button>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-900">Messages From Your Nurse</p>
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
+              <p className="text-sm font-semibold text-ink-900">Messages From Your Nurse</p>
               <div className="mt-3 space-y-3">
                 {incoming.length === 0 ? (
-                  <p className="text-sm text-slate-500">No new messages.</p>
+                  <p className="text-sm text-ink-500">No new messages.</p>
                 ) : (
                   incoming.slice(0, 4).map((msg) => (
                     <div
                       key={msg.id}
-                      className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-slate-700"
+                      className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-ink-700"
                     >
                       {msg.body}
                     </div>
@@ -540,32 +546,32 @@ export function PatientPortalPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-900">Baymax Assistant</p>
-              <p className="mt-2 text-sm text-slate-600">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
+              <p className="text-sm font-semibold text-ink-900">Baymax Assistant</p>
+              <p className="mt-2 text-sm text-ink-600">
                 Baymax will answer your questions out loud and log the exchange for your nurse.
               </p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-ink-400">
                 Heard: {liveTranscript ? `“${liveTranscript}”` : 'Listening…'}
               </p>
               {baymaxReply && (
-                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+                <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700">
                   {baymaxReply}
                 </div>
               )}
               {baymaxError && <p className="mt-3 text-xs text-rose-600">{baymaxError}</p>}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-900">Your Sent Messages</p>
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
+              <p className="text-sm font-semibold text-ink-900">Your Sent Messages</p>
               <div className="mt-3 space-y-3">
                 {outgoing.length === 0 ? (
-                  <p className="text-sm text-slate-500">No messages sent yet.</p>
+                  <p className="text-sm text-ink-500">No messages sent yet.</p>
                 ) : (
                   outgoing.slice(0, 4).map((msg) => (
                     <div
                       key={msg.id}
-                      className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-700"
+                      className="rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700"
                     >
                       {msg.body}
                     </div>
@@ -574,81 +580,81 @@ export function PatientPortalPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-900">Your Medical Record</p>
+                <p className="text-sm font-semibold text-ink-900">Your Medical Record</p>
                 <button
                   onClick={() => {
                     clearPatientSession();
                     navigate('/patient-login');
                   }}
-                  className="text-xs font-semibold text-slate-500"
+                  className="text-xs font-semibold text-ink-500"
                 >
                   Sign out
                 </button>
               </div>
               {recordLoading ? (
-                <p className="mt-3 text-sm text-slate-500">Loading record…</p>
+                <p className="mt-3 text-sm text-ink-500">Loading record…</p>
               ) : recordError ? (
                 <p className="mt-3 text-sm text-rose-600">{recordError}</p>
               ) : medicalRecord ? (
-                <div className="mt-3 space-y-3 text-sm text-slate-700">
+                <div className="mt-3 space-y-3 text-sm text-ink-700">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Allergies</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink-400">Allergies</p>
                     <p className="mt-1">
                       {medicalRecord.allergies?.length ? medicalRecord.allergies.join(', ') : 'None listed'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Conditions</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink-400">Conditions</p>
                     <p className="mt-1">
                       {medicalRecord.conditions?.length ? medicalRecord.conditions.join(', ') : 'None listed'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Documents</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink-400">Documents</p>
                     {Array.isArray(medicalRecord.documents) && medicalRecord.documents.length > 0 ? (
                       <div className="mt-2 space-y-2">
                         {medicalRecord.documents.map((doc: any, index: number) => (
                           <div
                             key={doc.id ?? `${doc.name ?? 'doc'}-${index}`}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                            className="rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-xs text-ink-600"
                           >
-                            <p className="text-sm font-semibold text-slate-800">
+                            <p className="text-sm font-semibold text-ink-900">
                               {doc.title ?? doc.name ?? `Document ${index + 1}`}
                             </p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-ink-500">
                               {doc.type ?? 'Document'}
                               {doc.createdAt ? ` · ${new Date(doc.createdAt).toLocaleDateString()}` : ''}
                             </p>
-                            {doc.summary && <p className="mt-1 text-xs text-slate-600">{doc.summary}</p>}
+                            {doc.summary && <p className="mt-1 text-xs text-ink-600">{doc.summary}</p>}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-1 text-sm text-slate-500">No documents available.</p>
+                      <p className="mt-1 text-sm text-ink-500">No documents available.</p>
                     )}
                   </div>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-slate-500">No record available.</p>
+                <p className="mt-3 text-sm text-ink-500">No record available.</p>
               )}
             </div>
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-xl">
+        <section className="rounded-[32px] border border-white/70 bg-white/80 p-7 shadow-panel">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-ink-400">
                 Today
               </p>
-              <h2 className="mt-3 text-2xl font-semibold text-slate-900">Vitals & Journey</h2>
-              <p className="mt-2 text-sm text-slate-600">
+              <h2 className="mt-3 text-2xl font-semibold text-ink-900">Vitals & Journey</h2>
+              <p className="mt-2 text-sm text-ink-600">
                 Live stats and your care journey timeline.
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+            <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-xs text-ink-500">
               {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room pending'}
             </div>
           </div>
@@ -656,21 +662,21 @@ export function PatientPortalPage() {
           <div className="mt-6 grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               {vitals.map((vital) => (
-                <div key={vital.label} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-xs text-slate-400">{vital.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                <div key={vital.label} className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                  <p className="text-xs text-ink-400">{vital.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-ink-900">
                     {vital.value}
-                    <span className="ml-1 text-sm font-medium text-slate-400">{vital.unit}</span>
+                    <span className="ml-1 text-sm font-medium text-ink-400">{vital.unit}</span>
                   </p>
                   <p className="mt-2 text-xs text-emerald-600">{vital.note}</p>
                 </div>
               ))}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-900">Care Journey</p>
-                <span className="text-xs text-slate-400">Today</span>
+                <p className="text-sm font-semibold text-ink-900">Care Journey</p>
+                <span className="text-xs text-ink-400">Today</span>
               </div>
               <div className="mt-4 space-y-3">
                 {journey.map((step, index) => {
@@ -681,8 +687,8 @@ export function PatientPortalPage() {
                       key={step.label}
                       className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${
                         isActive
-                          ? 'border-slate-900 bg-slate-900 text-white'
-                          : 'border-slate-200 bg-white text-slate-700'
+                          ? 'border-ink-950 bg-ink-950 text-white'
+                          : 'border-white/70 bg-white/80 text-ink-700'
                       }`}
                     >
                       <span className="font-semibold">{step.label}</span>
@@ -696,6 +702,7 @@ export function PatientPortalPage() {
             </div>
           </div>
         </section>
+        </div>
       </div>
     </div>
   );

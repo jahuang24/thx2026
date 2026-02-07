@@ -174,6 +174,19 @@ export function DoctorDashboard() {
   );
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+  const clampPan = (nextPan: { x: number; y: number }, nextZoom: number) => {
+    if (!floorplanRef.current) return nextPan;
+    const rect = floorplanRef.current.getBoundingClientRect();
+    const contentWidth = rect.width * nextZoom;
+    const contentHeight = rect.height * nextZoom;
+    const minX = Math.min(0, rect.width - contentWidth);
+    const minY = Math.min(0, rect.height - contentHeight);
+    return {
+      x: clamp(nextPan.x, minX, 0),
+      y: clamp(nextPan.y, minY, 0)
+    };
+  };
   const MIN_ZOOM = 0.7;
   const MAX_ZOOM = 3.5;
 
@@ -189,7 +202,7 @@ export function DoctorDashboard() {
       y: anchorY - (anchorY - pan.y) * scaleFactor
     };
     setZoom(clampedZoom);
-    setPan(nextPan);
+    setPan(clampPan(nextPan, clampedZoom));
   };
 
   const handleWheel: React.WheelEventHandler<HTMLDivElement> = (event) => {
@@ -207,14 +220,23 @@ export function DoctorDashboard() {
       return;
     }
 
-    setPan((prev) => ({
-      x: prev.x - event.deltaX,
-      y: prev.y - event.deltaY
-    }));
+    setPan((prev) =>
+      clampPan(
+        {
+          x: prev.x - event.deltaX,
+          y: prev.y - event.deltaY
+        },
+        zoom
+      )
+    );
   };
 
   const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
     if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.('[data-room-hit]')) {
+      return;
+    }
     isPanning.current = true;
     lastPointer.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -225,7 +247,7 @@ export function DoctorDashboard() {
     const dx = event.clientX - lastPointer.current.x;
     const dy = event.clientY - lastPointer.current.y;
     lastPointer.current = { x: event.clientX, y: event.clientY };
-    setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+    setPan((prev) => clampPan({ x: prev.x + dx, y: prev.y + dy }, zoom));
   };
 
   const handlePointerUp: React.PointerEventHandler<HTMLDivElement> = (event) => {
@@ -334,6 +356,7 @@ export function DoctorDashboard() {
                     return (
                       <g
                         key={room.id}
+                        data-room-hit
                         className="cursor-pointer"
                         onClick={() => navigate(`/rooms/${room.id}`)}
                         onPointerEnter={() => setHoveredRoomId(room.id)}
