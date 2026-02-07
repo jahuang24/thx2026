@@ -229,6 +229,7 @@ export function PatientPortalPage() {
     if (!roomId) return null;
     return rooms.find((room) => room.id === roomId) ?? null;
   }, [assignedBed?.roomId, patientRecord?.roomId, rooms]);
+  const isBaymaxSpeaking = mode !== 'WAITING' || Boolean(baymaxReply);
 
   useEffect(() => {
     const SpeechRecognitionApi =
@@ -402,20 +403,39 @@ export function PatientPortalPage() {
     setMicState('idle');
   };
 
+  const handleToggleMic = () => {
+    if (micEnabled) {
+      handleDisableMic();
+      return;
+    }
+    void handleEnableMic();
+  };
+
   const handleReset = () => {
     resetCapture();
     setError(null);
   };
 
-  const outgoing = useMemo(() => {
+  const chatMessages = useMemo(() => {
     if (!patient?.id) return [];
-    return messages.filter((msg) => msg.patientId === patient.id && msg.sender === 'PATIENT');
+    return messages
+      .filter((msg) => msg.patientId === patient.id)
+      .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
   }, [messages, patient?.id]);
 
-  const incoming = useMemo(() => {
-    if (!patient?.id) return [];
-    return messages.filter((msg) => msg.patientId === patient.id && msg.sender === 'NURSE');
-  }, [messages, patient?.id]);
+  const formatChatBody = (body: string) => {
+    const trimmed = body.trim();
+    const withoutBracketPrefix = trimmed.replace(/^\[[^\]]+\]\s*/u, '');
+    return withoutBracketPrefix.replace(/^Patient\s*→\s*Baymax\s*/iu, '');
+  };
+
+  const getChatSpeaker = (msg: { sender: string; body: string }) => {
+    if (msg.sender === 'NURSE') return 'Nurse';
+    const trimmed = msg.body.trim();
+    if (/^\[Baymax\]/iu.test(trimmed)) return 'Baymax';
+    if (/^\[Patient\s*→\s*Baymax\]/iu.test(trimmed)) return 'You';
+    return 'You';
+  };
 
   const vitals = [
     { label: 'Heart Rate', value: '84', unit: 'bpm', note: 'Stable' },
@@ -486,108 +506,190 @@ export function PatientPortalPage() {
           </div>
 
           <div className="mt-6 grid gap-4">
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink-900">Listening</p>
+            <div className="baymax-stage">
+              <div className="baymax-stage__header">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ink-400">
+                    Baymax Live
+                  </p>
+                  <p className="mt-2 text-sm text-ink-700">
+                    {mode === 'WAITING'
+                      ? 'Say “baymax” to ask a question or send a message.'
+                      : 'Pause when finished and we will send it.'}
+                  </p>
+                </div>
                 <span
                   className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                    mode === 'WAITING'
-                      ? 'bg-white text-ink-500'
-                      : 'bg-emerald-100 text-emerald-700'
+                    micEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-ink-500'
                   }`}
                 >
                   <span
                     className={`h-2 w-2 rounded-full ${
-                      mode === 'WAITING' ? 'bg-ink-400' : 'bg-emerald-500 animate-pulse'
+                      micEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-ink-400'
                     }`}
                   />
                   {micEnabled ? (mode === 'WAITING' ? 'Ready' : 'Listening') : 'Mic Off'}
                 </span>
               </div>
-              <p className="mt-3 text-base text-ink-700">
-                {mode === 'WAITING'
-                  ? 'Say “baymax” to ask a question. Say “baymax, send a message to the nurse” to send a message.'
-                  : 'Pause when finished and we will send it.'}
-              </p>
-              {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  onClick={handleEnableMic}
-                  className="rounded-full bg-ink-950 px-5 py-2 text-xs font-semibold text-white"
-                >
-                  Enable microphone
-                </button>
-                <button
-                  onClick={handleDisableMic}
-                  className="rounded-full border border-white/70 bg-white/80 px-5 py-2 text-xs font-semibold text-ink-700"
-                >
-                  Disable microphone
-                </button>
-              </div>
-            </div>
 
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <p className="text-sm font-semibold text-ink-900">Your Message</p>
-              <p className="mt-3 text-lg font-semibold text-ink-900">
-                {captured ? `“${captured}”` : 'No message yet.'}
-              </p>
+              <div className="baymax-stage__body">
+                <div
+                  className={`baymax-avatar baymax-avatar--hero ${
+                    isBaymaxSpeaking ? 'baymax-avatar--speaking' : ''
+                  }`}
+                  aria-hidden
+                >
+                  <svg viewBox="0 0 120 160">
+                    <defs>
+                      <radialGradient id="baymaxHighlight" cx="50%" cy="35%" r="70%">
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                        <stop offset="60%" stopColor="#f3f4f6" stopOpacity="0.95" />
+                        <stop offset="100%" stopColor="#e5e7eb" stopOpacity="0.9" />
+                      </radialGradient>
+                    </defs>
+                    <g className="baymax-avatar__body">
+                      <rect x="26" y="40" width="68" height="94" rx="34" fill="url(#baymaxHighlight)" />
+                      <ellipse cx="60" cy="36" rx="28" ry="26" fill="url(#baymaxHighlight)" />
+                    </g>
+                    <g className="baymax-avatar__face">
+                      <circle cx="50" cy="30" r="4" fill="#111827" />
+                      <circle cx="70" cy="30" r="4" fill="#111827" />
+                      <line
+                        className="baymax-avatar__mouth"
+                        x1="54"
+                        y1="30"
+                        x2="66"
+                        y2="30"
+                        stroke="#111827"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      />
+                    </g>
+                    <ellipse cx="100" cy="205" rx="70" ry="12" fill="#cbd5f5" opacity="0.35" />
+                  </svg>
+                </div>
+                <div className="baymax-stage__copy">
+                  <p className="text-xs text-ink-400">
+                    Heard: {liveTranscript ? `“${liveTranscript}”` : 'Listening…'}
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-ink-900">
+                    {captured ? `“${captured}”` : 'No message captured yet.'}
+                  </p>
+                  <button
+                    onClick={handleReset}
+                    className="mt-3 inline-flex rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-semibold text-ink-700"
+                  >
+                    Clear
+                  </button>
+                  {baymaxReply && (
+                    <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700">
+                      {baymaxReply}
+                    </div>
+                  )}
+                  {baymaxError && <p className="mt-3 text-xs text-rose-600">{baymaxError}</p>}
+                  {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
+                </div>
+              </div>
+
               <button
-                onClick={handleReset}
-                className="mt-4 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-semibold text-ink-700"
+                onClick={handleToggleMic}
+                className={`mic-toggle ${micEnabled ? 'mic-toggle--on' : ''}`}
+                aria-pressed={micEnabled}
+                type="button"
               >
-                Clear
+                <span className="mic-toggle__track">
+                  <span className="mic-toggle__thumb" />
+                </span>
+                <span className="mic-toggle__label">{micEnabled ? 'Mic On' : 'Mic Off'}</span>
               </button>
             </div>
 
             <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <p className="text-sm font-semibold text-ink-900">Messages From Your Nurse</p>
-              <div className="mt-3 space-y-3">
-                {incoming.length === 0 ? (
-                  <p className="text-sm text-ink-500">No new messages.</p>
+              <p className="text-sm font-semibold text-ink-900">Messages</p>
+              <p className="mt-2 text-xs text-ink-400">Incoming and outgoing in one thread.</p>
+              <div className="mt-4 space-y-3 chat-thread">
+                {chatMessages.length === 0 ? (
+                  <p className="text-sm text-ink-500">No messages yet.</p>
                 ) : (
-                  incoming.slice(0, 4).map((msg) => (
+                  chatMessages.slice(-6).map((msg) => (
                     <div
                       key={msg.id}
-                      className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-ink-700"
+                      className={`rounded-2xl border px-4 py-3 text-sm ${
+                        getChatSpeaker(msg) === 'You'
+                          ? 'border-white/70 bg-white/70 text-ink-700'
+                          : 'border-emerald-100 bg-emerald-50/70 text-ink-700'
+                      }`}
                     >
-                      {msg.body}
+                      <p className="text-xs font-semibold text-ink-500">
+                        {getChatSpeaker(msg)}
+                      </p>
+                      <p className="mt-2">{formatChatBody(msg.body)}</p>
+                      <p className="mt-2 text-xs text-ink-400">
+                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   ))
                 )}
               </div>
             </div>
+          </div>
+        </section>
 
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <p className="text-sm font-semibold text-ink-900">Baymax Assistant</p>
+        <section className="rounded-[32px] border border-white/70 bg-white/80 p-7 shadow-panel">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-ink-400">
+                Today
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold text-ink-900">Vitals & Journey</h2>
               <p className="mt-2 text-sm text-ink-600">
-                Baymax will answer your questions out loud and log the exchange for your nurse.
+                Live stats and your care journey timeline.
               </p>
-              <p className="mt-2 text-xs text-ink-400">
-                Heard: {liveTranscript ? `“${liveTranscript}”` : 'Listening…'}
-              </p>
-              {baymaxReply && (
-                <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700">
-                  {baymaxReply}
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-xs text-ink-500">
+              {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room pending'}
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {vitals.map((vital) => (
+                <div key={vital.label} className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                  <p className="text-xs text-ink-400">{vital.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-ink-900">
+                    {vital.value}
+                    <span className="ml-1 text-sm font-medium text-ink-400">{vital.unit}</span>
+                  </p>
+                  <p className="mt-2 text-xs text-emerald-600">{vital.note}</p>
                 </div>
-              )}
-              {baymaxError && <p className="mt-3 text-xs text-rose-600">{baymaxError}</p>}
+              ))}
             </div>
 
             <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <p className="text-sm font-semibold text-ink-900">Your Sent Messages</p>
-              <div className="mt-3 space-y-3">
-                {outgoing.length === 0 ? (
-                  <p className="text-sm text-ink-500">No messages sent yet.</p>
-                ) : (
-                  outgoing.slice(0, 4).map((msg) => (
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-ink-900">Care Journey</p>
+                <span className="text-xs text-ink-400">Today</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {journey.map((step, index) => {
+                  const isActive = index === currentStepIndex;
+                  const isComplete = index < currentStepIndex;
+                  return (
                     <div
-                      key={msg.id}
-                      className="rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700"
+                      key={step.label}
+                      className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${
+                        isActive
+                          ? 'border-ink-950 bg-ink-950 text-white'
+                          : 'border-white/70 bg-white/80 text-ink-700'
+                      }`}
                     >
-                      {msg.body}
+                      <span className="font-semibold">{step.label}</span>
+                      <span className="text-xs">
+                        {isComplete ? 'Completed' : isActive ? 'In progress' : step.time}
+                      </span>
                     </div>
-                  ))
-                )}
+                  );
+                })}
               </div>
             </div>
 
@@ -650,66 +752,6 @@ export function PatientPortalPage() {
               ) : (
                 <p className="mt-3 text-sm text-ink-500">No record available.</p>
               )}
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[32px] border border-white/70 bg-white/80 p-7 shadow-panel">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-ink-400">
-                Today
-              </p>
-              <h2 className="mt-3 text-2xl font-semibold text-ink-900">Vitals & Journey</h2>
-              <p className="mt-2 text-sm text-ink-600">
-                Live stats and your care journey timeline.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-xs text-ink-500">
-              {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room pending'}
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {vitals.map((vital) => (
-                <div key={vital.label} className="rounded-2xl border border-white/70 bg-white/80 p-4">
-                  <p className="text-xs text-ink-400">{vital.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-ink-900">
-                    {vital.value}
-                    <span className="ml-1 text-sm font-medium text-ink-400">{vital.unit}</span>
-                  </p>
-                  <p className="mt-2 text-xs text-emerald-600">{vital.note}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink-900">Care Journey</p>
-                <span className="text-xs text-ink-400">Today</span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {journey.map((step, index) => {
-                  const isActive = index === currentStepIndex;
-                  const isComplete = index < currentStepIndex;
-                  return (
-                    <div
-                      key={step.label}
-                      className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${
-                        isActive
-                          ? 'border-ink-950 bg-ink-950 text-white'
-                          : 'border-white/70 bg-white/80 text-ink-700'
-                      }`}
-                    >
-                      <span className="font-semibold">{step.label}</span>
-                      <span className="text-xs">
-                        {isComplete ? 'Completed' : isActive ? 'In progress' : step.time}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           </div>
         </section>
