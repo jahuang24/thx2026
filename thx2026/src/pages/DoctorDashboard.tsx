@@ -17,7 +17,7 @@ type FloorplanSlot = {
 };
 
 const statusFills: Record<RoomStatus, { color: string; opacity: number }> = {
-  READY: { color: '#22c55e', opacity: 0.7 },
+  READY: { color: '#e1f4e7', opacity: 1 },
   NOT_READY: { color: '#f59e0b', opacity: 0.75 },
   CLEANING: { color: '#14b8a6', opacity: 0.75 },
   NEEDS_MAINTENANCE: { color: '#f43f5e', opacity: 0.75 },
@@ -222,9 +222,16 @@ export function DoctorDashboard() {
                       key={room.id}
                       className="cursor-pointer"
                       onClick={() => navigate(`/rooms/${room.id}`)}
-                      onMouseEnter={() => setHoveredRoomId(room.id)}
-                      onMouseLeave={() => setHoveredRoomId(null)}
+                      onPointerEnter={() => setHoveredRoomId(room.id)}
+                      onPointerLeave={() => setHoveredRoomId(null)}
                     >
+                      <polygon
+                        points={points}
+                        fill="transparent"
+                        stroke="transparent"
+                        strokeWidth="0.025"
+                        vectorEffect="non-scaling-stroke"
+                      />
                       <polygon
                         points={points}
                         fill={fill.color}
@@ -241,7 +248,7 @@ export function DoctorDashboard() {
                 {labels.map((label) => (
                   <span
                     key={label.roomId}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 text-xs font-semibold text-white drop-shadow"
+                    className="absolute -translate-x-1/2 -translate-y-1/2 text-xs font-semibold text-ink-950"
                     style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
                   >
                     {label.label}
@@ -250,7 +257,7 @@ export function DoctorDashboard() {
               </div>
               {hoveredRoom && hoveredLabel && (
                 <div
-                  className="absolute z-20 -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-white/70 bg-white/95 p-3 text-xs text-ink-700 shadow-xl"
+                  className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-white/70 bg-white/95 p-3 text-xs text-ink-700 shadow-xl"
                   style={{ left: `${hoveredLabel.x * 100}%`, top: `${hoveredLabel.y * 100}%` }}
                 >
                   <p className="text-sm font-semibold text-ink-900">Room {hoveredRoom.roomNumber}</p>
