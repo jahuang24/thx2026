@@ -68,7 +68,7 @@ export function Layout({ children, pageTitle }: { children: React.ReactNode; pag
                 <div className="min-w-[34px] h-9 rounded-2xl bg-ink-950 text-white text-xs flex items-center justify-center tracking-[0.2em]">
                   HF
                 </div>
-                {sidebarOpen && <span className="nav-brand whitespace-nowrap">Hospital Flow</span>}
+                {sidebarOpen && <span className="nav-brand whitespace-nowrap">Baywatch</span>}
               </Link>
             </div>
 

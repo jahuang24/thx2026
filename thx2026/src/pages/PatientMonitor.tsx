@@ -6,7 +6,7 @@ import { AutonomousRelayAgent } from '../agent/autonomousRelayAgent';
 import { startMonitorSession, type MonitorSession } from '../monitor/mediapipe';
 import { beds, patients, rooms } from '../data/mock';
 import { useMonitorStore } from '../store/monitorStore';
-import type { CalibrationProfile, MonitorEvent, MonitorEventType, PatientSubject, RollingMetricsSnapshot } from '../types/monitor';
+import type { CalibrationProfile, PatientSubject, RollingMetricsSnapshot } from '../types/monitor';
 import { fetchPatientById, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
 import { createAdmission, fetchAdmissions, updateAdmissionStatus } from '../services/admissionsApi';
 import { store as appStore } from '../services/store';
@@ -20,16 +20,6 @@ const zeroMetrics: RollingMetricsSnapshot = {
   postureChangeRate: 0,
   movementLevel: 0
 };
-
-function createSyntheticEvent(subjectId: string, type: MonitorEventType, ts: number, detail?: string): MonitorEvent {
-  return {
-    id: `synthetic-${type}-${subjectId}-${ts}-${Math.random().toString(36).slice(2, 7)}`,
-    ts,
-    subjectId,
-    type,
-    detail
-  };
-}
 
 function averageMetric(samples: RollingMetricsSnapshot[], field: keyof RollingMetricsSnapshot) {
   if (!samples.length) {
@@ -86,29 +76,22 @@ export function PatientMonitorPage() {
   const [calibrationRemaining, setCalibrationRemaining] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noSubjectDetected, setNoSubjectDetected] = useState(false);
-  const [debugOverlay, setDebugOverlay] = useState(false);
   const [agentBackendLabel, setAgentBackendLabel] = useState('RULES');
   const [agentBackendError, setAgentBackendError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const debugCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const relayAgentRef = useRef(new AutonomousRelayAgent());
   const sessionRef = useRef<MonitorSession | null>(null);
   const calibrationIntervalRef = useRef<number | null>(null);
   const calibrationTimeoutRef = useRef<number | null>(null);
   const lastEvaluatedTsRef = useRef(0);
   const noSubjectRef = useRef(false);
-  const debugOverlayRef = useRef(debugOverlay);
   const evaluationRunningRef = useRef(false);
 
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
-  useEffect(() => {
-    debugOverlayRef.current = debugOverlay;
-  }, [debugOverlay]);
 
   const selectedSubject = useMemo(
     () => state.subjects.find((subject) => subject.id === state.selectedSubjectId),
@@ -224,8 +207,8 @@ export function PatientMonitorPage() {
       const session = await startMonitorSession({
         subjectId: selectedSubject.id,
         videoElement: videoRef.current,
-        debugCanvas: debugCanvasRef.current,
-        shouldShowDebugOverlay: () => debugOverlayRef.current,
+        debugCanvas: null,
+        shouldShowDebugOverlay: () => false,
         onFrame: handleProcessedFrame
       });
       sessionRef.current = session;
@@ -298,64 +281,6 @@ export function PatientMonitorPage() {
     setNoSubjectDetected(false);
     lastEvaluatedTsRef.current = 0;
   }, [actions, clearCalibrationTimers, stopMonitor]);
-
-  const injectScenario = useCallback(
-    (scenario: 'nausea' | 'posture-drop' | 'drowsy') => {
-      const currentState = stateRef.current;
-      const subject = currentState.subjects.find((item) => item.id === currentState.selectedSubjectId);
-      if (!subject) {
-        return;
-      }
-      const now = Date.now();
-
-      if (scenario === 'nausea') {
-        const metrics: RollingMetricsSnapshot = {
-          perclos: 0.14,
-          handToMouthPerMin: 3.4,
-          handToTemplePerMin: 1.2,
-          forwardLeanSecondsPerMin: 28,
-          postureChangeRate: 6.8,
-          movementLevel: 0.74
-        };
-        actions.upsertSubject(updateSubject(subject, { latestMetrics: metrics, status: 'ACTIVE', lastSeenAt: now }));
-        actions.addEvent(createSyntheticEvent(subject.id, 'HAND_TO_MOUTH', now - 10000, 'Synthetic hand-to-mouth.'));
-        actions.addEvent(createSyntheticEvent(subject.id, 'HAND_TO_MOUTH', now - 8000, 'Synthetic hand-to-mouth.'));
-        actions.addEvent(createSyntheticEvent(subject.id, 'HAND_TO_MOUTH', now - 5000, 'Synthetic hand-to-mouth.'));
-        actions.addEvent(createSyntheticEvent(subject.id, 'FORWARD_LEAN', now - 4000, 'Synthetic forward lean.'));
-        actions.addEvent(createSyntheticEvent(subject.id, 'RESTLESSNESS_SPIKE', now - 2000, 'Synthetic restlessness.'));
-      }
-
-      if (scenario === 'posture-drop') {
-        const metrics: RollingMetricsSnapshot = {
-          perclos: 0.2,
-          handToMouthPerMin: 0.5,
-          handToTemplePerMin: 0.2,
-          forwardLeanSecondsPerMin: 8,
-          postureChangeRate: 1.3,
-          movementLevel: 0.1
-        };
-        actions.upsertSubject(updateSubject(subject, { latestMetrics: metrics, status: 'ACTIVE', lastSeenAt: now }));
-        actions.addEvent(createSyntheticEvent(subject.id, 'POSTURE_DROP', now - 1000, 'Synthetic posture drop.'));
-      }
-
-      if (scenario === 'drowsy') {
-        const metrics: RollingMetricsSnapshot = {
-          perclos: 0.32,
-          handToMouthPerMin: 0.3,
-          handToTemplePerMin: 0.2,
-          forwardLeanSecondsPerMin: 6,
-          postureChangeRate: 1.1,
-          movementLevel: 0.16
-        };
-        actions.upsertSubject(updateSubject(subject, { latestMetrics: metrics, status: 'ACTIVE', lastSeenAt: now }));
-        actions.addEvent(
-          createSyntheticEvent(subject.id, 'PROLONGED_EYE_CLOSURE', now - 1000, 'Synthetic prolonged eye closure.')
-        );
-      }
-      void runAgentEvaluation();
-    },
-    [actions, runAgentEvaluation]
-  );
 
   useEffect(() => {
     if (!state.monitorRunning) {
@@ -538,6 +463,26 @@ export function PatientMonitorPage() {
         </div>
       </header>
 
+      <section className="monitor-video-panel rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
+        <div className="tracker-preview__head">
+          <div>
+            <h3>Live video feed</h3>
+            <p>16:9 wide feed for the focused subject.</p>
+          </div>
+        </div>
+
+        <div className="preview-frame monitor-video-frame">
+          <video ref={videoRef} autoPlay muted playsInline />
+          {!state.monitorRunning ? <div className="preview-overlay-label">Monitor stopped</div> : null}
+          {starting ? (
+            <div className="preview-overlay-label preview-overlay-label--skeleton">Starting monitor...</div>
+          ) : null}
+          {noSubjectDetected && state.monitorRunning ? <div className="preview-alert">No subject detected</div> : null}
+        </div>
+
+        {errorMessage ? <p className="monitor-error">{errorMessage}</p> : null}
+      </section>
+
       <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
           <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Subjects Tracked</p>
@@ -563,21 +508,11 @@ export function PatientMonitorPage() {
       <section className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
         <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
           <PatientTrackerPanel
-            videoRef={videoRef}
-            debugCanvasRef={debugCanvasRef}
-            monitorRunning={state.monitorRunning}
-            starting={starting}
-            errorMessage={errorMessage}
-            noSubjectDetected={noSubjectDetected}
-            debugOverlay={debugOverlay}
-            onDebugOverlayChange={setDebugOverlay}
             subjects={state.subjects}
             selectedSubjectId={state.selectedSubjectId}
             relayStateBySubject={state.agentStateBySubject}
             onSelectSubject={actions.selectSubject}
             events={state.events}
-            showDevInjectors={import.meta.env.DEV}
-            onInjectScenario={injectScenario}
           />
         </div>
         <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
@@ -593,4 +528,3 @@ export function PatientMonitorPage() {
     </div>
   );
 }
-
