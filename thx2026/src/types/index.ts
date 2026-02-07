@@ -5,7 +5,14 @@ export type TaskType = 'CLEANING' | 'MAINTENANCE' | 'NURSING';
 export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE';
 export type AlertStatus = 'OPEN' | 'ACK' | 'RESOLVED';
 export type AlertSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
-export type AlertCategory = 'FALL_RISK' | 'BED_EXIT' | 'DISTRESS' | 'INACTIVITY' | 'EQUIPMENT';
+export type AlertCategory =
+  | 'FALL_RISK'
+  | 'BED_EXIT'
+  | 'DISTRESS'
+  | 'INACTIVITY'
+  | 'EQUIPMENT'
+  | 'ROOM_CHANGE'
+  | 'CONDITION_CHANGE';
 export type CVEventType = 'FALL_DETECTED' | 'BED_EXIT' | 'PROLONGED_INACTIVITY' | 'MISSING_BED_RAIL' | 'CALL_LIGHT';
 export type AdmissionStatus = 'PENDING' | 'ASSIGNED' | 'ADMITTED';
 export type RoomType = 'ICU' | 'MED_SURG' | 'OBS' | 'ISOLATION';

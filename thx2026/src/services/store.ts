@@ -1,4 +1,5 @@
-import type { Alert, CVEvent, Message, Task } from '../types';
+import type { Alert, AlertCategory, AlertSeverity, CVEvent, Message, Task } from '../types';
+import type { AgentMessage, AgentSeverity } from '../types/monitor';
 import {
   alerts as seedAlerts,
   cvEvents as seedCvEvents,
@@ -28,6 +29,8 @@ class Store {
   cvEvents: CVEvent[] = [...seedCvEvents];
   tasks: Task[] = [...seedTasks];
   messages: Message[] = [];
+  agentMessages: AgentMessage[] = [];
+  private readonly conditionAlertCooldownBySubject = new Map<string, number>();
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -64,6 +67,82 @@ class Store {
     }
 
     realtimeBus.emit('cvEventIngested', { event });
+  }
+
+  addAgentMessage(message: AgentMessage, source: 'MONITOR' | 'SYSTEM' = 'MONITOR') {
+    const existing = this.agentMessages.find((item) => item.id === message.id);
+    if (existing) {
+      return;
+    }
+    const previousForSubject = this.agentMessages.find((item) => item.subjectId === message.subjectId);
+    this.agentMessages = [message, ...this.agentMessages].sort((left, right) => right.ts - left.ts).slice(0, 100);
+    realtimeBus.emit('agentFeedUpdated', { source, message });
+
+    if (source === 'MONITOR' && this.shouldRaiseConditionAlert(message, previousForSubject)) {
+      const severity = this.agentSeverityToAlertSeverity(message.severity);
+      this.createOperationalAlert({
+        category: 'CONDITION_CHANGE',
+        severity,
+        patientId: message.subjectId,
+        roomId: undefined,
+        notes: `${message.observed} Confidence ${Math.round(message.confidence * 100)}%.`
+      });
+    }
+  }
+
+  createOperationalAlert(input: {
+    category: AlertCategory;
+    severity: AlertSeverity;
+    roomId?: string;
+    patientId?: string;
+    notes: string;
+  }) {
+    const alert: Alert = {
+      id: `alert-${Math.random().toString(36).slice(2, 10)}`,
+      roomId: input.roomId,
+      patientId: input.patientId,
+      severity: input.severity,
+      category: input.category,
+      status: 'OPEN',
+      createdAt: new Date().toISOString(),
+      notes: input.notes
+    };
+    this.alerts = [alert, ...this.alerts];
+    realtimeBus.emit('newAlert', { alert });
+  }
+
+  private shouldRaiseConditionAlert(message: AgentMessage, previousForSubject?: AgentMessage) {
+    const severityRank: Record<AgentSeverity, number> = {
+      LOW: 1,
+      MED: 2,
+      HIGH: 3
+    };
+    const severeEnough = severityRank[message.severity] >= severityRank.MED;
+    if (!severeEnough) {
+      return false;
+    }
+    const now = message.ts;
+    const cooldownUntil = this.conditionAlertCooldownBySubject.get(message.subjectId) ?? 0;
+    if (now < cooldownUntil) {
+      return false;
+    }
+    const escalated = previousForSubject
+      ? severityRank[message.severity] > severityRank[previousForSubject.severity]
+      : true;
+    const confidenceJump = previousForSubject
+      ? message.confidence - previousForSubject.confidence >= 0.2
+      : message.confidence >= 0.7;
+    if (!escalated && !confidenceJump) {
+      return false;
+    }
+    this.conditionAlertCooldownBySubject.set(message.subjectId, now + 90000);
+    return true;
+  }
+
+  private agentSeverityToAlertSeverity(value: AgentSeverity): AlertSeverity {
+    if (value === 'HIGH') return 'HIGH';
+    if (value === 'MED') return 'MEDIUM';
+    return 'LOW';
   }
 
   acknowledgeAlert(alertId: string, note: string, user: string) {

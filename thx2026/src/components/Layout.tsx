@@ -18,6 +18,7 @@ import { store } from '../services/store';
 
 export function Layout({ children, pageTitle }: { children: React.ReactNode; pageTitle?: string }) {
   const [messages, setMessages] = useState(store.messages);
+  const [alerts, setAlerts] = useState(store.alerts);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
@@ -25,15 +26,23 @@ export function Layout({ children, pageTitle }: { children: React.ReactNode; pag
     const unsubscribeUpdated = realtimeBus.on('messageUpdated', () =>
       setMessages([...store.messages])
     );
+    const unsubscribeAlertNew = realtimeBus.on('newAlert', () => setAlerts([...store.alerts]));
+    const unsubscribeAlertUpdated = realtimeBus.on('alertUpdated', () => setAlerts([...store.alerts]));
     return () => {
       unsubscribeNew();
       unsubscribeUpdated();
+      unsubscribeAlertNew();
+      unsubscribeAlertUpdated();
     };
   }, []);
 
   const unreadMessages = useMemo(
     () => messages.filter((message) => message.sender === 'PATIENT' && !message.readByNurse).length,
     [messages]
+  );
+  const activeAlerts = useMemo(
+    () => alerts.filter((alert) => alert.status === 'OPEN').length,
+    [alerts]
   );
 
   const navItems = [
@@ -42,7 +51,7 @@ export function Layout({ children, pageTitle }: { children: React.ReactNode; pag
     { path: '/admissions', label: 'Admissions & Placement', icon: UserPlus },
     { path: '/tasks', label: 'Tasks', icon: ClipboardList },
     { path: '/messages', label: 'Patient Messages', icon: MessageSquare, badge: unreadMessages },
-    { path: '/alerts', label: 'Alerts', icon: AlertTriangle },
+    { path: '/alerts', label: 'Alerts', icon: AlertTriangle, badge: activeAlerts },
     { path: '/admin', label: 'Admin', icon: Settings }
   ];
 

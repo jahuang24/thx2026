@@ -9,6 +9,10 @@ export interface TriageEntry {
   mrn: string;
   roomLabel: string;
   bedLabel: string;
+  roomAssigned: boolean;
+  latestPatientMessage: string;
+  patientMessageSummary: string;
+  patientMessageSignalScore: number;
   score: number;
   level: TriageLevel;
   reasons: string[];
@@ -25,17 +29,44 @@ interface TriageInputs {
   beds: Bed[];
 }
 
-const symptomKeywords = [
+const HIGH_URGENCY_PATTERNS = [
+  /a lot of pain/i,
+  /severe pain/i,
+  /worst pain/i,
+  /\b10\/10 pain\b/i,
+  /can(?:not|'t) breathe/i,
+  /shortness of breath/i,
+  /chest pain/i,
+  /heavy bleeding/i,
+  /help me/i,
+  /emergency/i
+];
+
+const MEDIUM_URGENCY_PATTERNS = [
+  /\bpain\b/i,
+  /\bdizzy\b/i,
+  /\bnausea\b/i,
+  /\bvomit/i,
+  /\bshort of breath\b/i,
+  /\blightheaded\b/i,
+  /\bweak\b/i,
+  /\bscared\b/i,
+  /\banxious\b/i
+];
+
+const NEGATIVE_SENTIMENT_TERMS = [
   'pain',
-  'short of breath',
-  'breath',
-  'dizzy',
-  'chest',
-  'bleed',
-  'nausea',
-  'vomit',
+  'hurt',
+  'worse',
+  'worst',
+  'scared',
+  'afraid',
+  'panic',
   'cannot',
-  'help'
+  "can't",
+  'struggling',
+  'bleeding',
+  'urgent'
 ];
 
 function clamp(min: number, value: number, max: number) {
@@ -55,6 +86,65 @@ function acuityBaseScore(value: Patient['acuityLevel'] | undefined) {
   if (value === 'MEDIUM') return 25;
   if (value === 'LOW') return 10;
   return 18;
+}
+
+function evaluatePatientMessageSignal(patientMessages: Message[]) {
+  if (!patientMessages.length) {
+    return {
+      score: 0,
+      reasons: [] as string[],
+      latestMessage: '',
+      summary: ''
+    };
+  }
+
+  const recentMessages = [...patientMessages]
+    .sort((left, right) => new Date(right.sentAt).getTime() - new Date(left.sentAt).getTime())
+    .slice(0, 5);
+  const latestMessage = recentMessages[0]?.body ?? '';
+  const summary = recentMessages.map((message) => message.body.trim()).filter(Boolean).slice(0, 3).join(' | ');
+
+  let score = 0;
+  let highUrgencyHits = 0;
+  let mediumUrgencyHits = 0;
+  let sentimentHits = 0;
+
+  recentMessages.forEach((message) => {
+    const body = message.body.toLowerCase();
+    const highMatched = HIGH_URGENCY_PATTERNS.some((pattern) => pattern.test(body));
+    const mediumMatched = MEDIUM_URGENCY_PATTERNS.some((pattern) => pattern.test(body));
+    const localSentimentHits = NEGATIVE_SENTIMENT_TERMS.filter((term) => body.includes(term)).length;
+
+    if (highMatched) {
+      highUrgencyHits += 1;
+      score += 14;
+    } else if (mediumMatched) {
+      mediumUrgencyHits += 1;
+      score += 7;
+    }
+
+    if (localSentimentHits > 0) {
+      sentimentHits += localSentimentHits;
+      score += Math.min(4, localSentimentHits);
+    }
+  });
+
+  const reasons: string[] = [];
+  if (highUrgencyHits > 0) {
+    reasons.push(`Patient chat shows high-urgency distress terms (${highUrgencyHits} hit${highUrgencyHits > 1 ? 's' : ''})`);
+  } else if (mediumUrgencyHits > 0) {
+    reasons.push(`Patient chat shows symptom distress language (${mediumUrgencyHits} hit${mediumUrgencyHits > 1 ? 's' : ''})`);
+  }
+  if (sentimentHits >= 3) {
+    reasons.push('Patient message sentiment indicates elevated distress');
+  }
+
+  return {
+    score: clamp(0, score, 35),
+    reasons,
+    latestMessage,
+    summary
+  };
 }
 
 export function getTriagePalette(level: TriageLevel) {
@@ -101,12 +191,13 @@ export function buildTriageEntries({
   const entries = patients.map((patient) => {
     const seeded = seededById.get(patient.id);
     const openAlerts = alerts.filter((alert) => alert.status === 'OPEN' && alert.patientId === patient.id);
-    const unreadPatientMessages = messages.filter(
-      (message) => message.patientId === patient.id && message.sender === 'PATIENT' && !message.readByNurse
-    );
-    const latestPatientMessage = messages.find(
+    const patientMessages = messages.filter(
       (message) => message.patientId === patient.id && message.sender === 'PATIENT'
     );
+    const unreadPatientMessages = patientMessages.filter(
+      (message) => message.patientId === patient.id && message.sender === 'PATIENT' && !message.readByNurse
+    );
+    const messageSignal = evaluatePatientMessageSignal(patientMessages);
 
     let score = acuityBaseScore(seeded?.acuityLevel);
     const reasons: string[] = [];
@@ -145,13 +236,9 @@ export function buildTriageEntries({
       reasons.push(`${unreadPatientMessages.length} unread patient message(s)`);
     }
 
-    if (latestPatientMessage) {
-      const normalized = latestPatientMessage.body.toLowerCase();
-      const matched = symptomKeywords.find((keyword) => normalized.includes(keyword));
-      if (matched) {
-        score += 8;
-        reasons.push(`Recent symptom phrase matched: "${matched}"`);
-      }
+    score += messageSignal.score;
+    if (messageSignal.reasons.length > 0) {
+      reasons.push(...messageSignal.reasons);
     }
 
     const bed = patient.bedId ? bedById.get(patient.bedId) : undefined;
@@ -163,16 +250,32 @@ export function buildTriageEntries({
       reasons.push('Incomplete room/bed assignment');
     }
 
-    const finalScore = clamp(0, score, 100);
+    let finalScore = clamp(0, score, 100);
+    let level = scoreToLevel(finalScore);
+    if (!room && level === 'LOW') {
+      level = 'MEDIUM';
+      finalScore = Math.max(finalScore, 30);
+      reasons.push('No room assignment: minimum triage level set to MEDIUM');
+    }
+
+    const prioritizedReasons = [
+      ...messageSignal.reasons,
+      ...reasons.filter((reason) => !messageSignal.reasons.includes(reason))
+    ].slice(0, 4);
+
     return {
       patientId: patient.id,
       name: patient.name || 'Patient',
       mrn: patient.mrn || 'Unknown',
       roomLabel,
       bedLabel,
+      roomAssigned: Boolean(room),
+      latestPatientMessage: messageSignal.latestMessage,
+      patientMessageSummary: messageSignal.summary,
+      patientMessageSignalScore: messageSignal.score,
       score: finalScore,
-      level: scoreToLevel(finalScore),
-      reasons: reasons.slice(0, 4),
+      level,
+      reasons: prioritizedReasons,
       openAlertCount: openAlerts.length,
       unreadPatientMessages: unreadPatientMessages.length
     };

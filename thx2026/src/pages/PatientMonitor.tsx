@@ -9,6 +9,7 @@ import { useMonitorStore } from '../store/monitorStore';
 import type { CalibrationProfile, MonitorEvent, MonitorEventType, PatientSubject, RollingMetricsSnapshot } from '../types/monitor';
 import { fetchPatientById, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
 import { createAdmission, fetchAdmissions, updateAdmissionStatus } from '../services/admissionsApi';
+import { store as appStore } from '../services/store';
 
 const CALIBRATION_SECONDS = 20;
 const zeroMetrics: RollingMetricsSnapshot = {
@@ -174,6 +175,7 @@ export function PatientMonitorPage() {
       actions.upsertSubject(updateSubject(subject, { latestObservedSignals: result.observedSignals }));
       if (result.message) {
         actions.addAgentMessage(result.message);
+        appStore.addAgentMessage(result.message, 'MONITOR');
       }
     } finally {
       evaluationRunningRef.current = false;
