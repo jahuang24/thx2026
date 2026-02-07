@@ -384,7 +384,8 @@ router.post("/:id/chat", async (req, res) => {
       "Use the provided context from the patient's medical record, messages, and vitals.",
       "Offer general medical information, not a diagnosis.",
       "If unsure or if symptoms seem severe, advise contacting the care team.",
-      "Keep answers very short (1-3 sentences), clear, and reassuring."
+      "Keep answers very short (1-3 sentences), clear, and reassuring.",
+      "Do not say Baymax in your answer."
     ].join(" ");
 
     const userPrompt = `Patient question: ${message}\\n\\nContext:\\n${contextBlock}`;
