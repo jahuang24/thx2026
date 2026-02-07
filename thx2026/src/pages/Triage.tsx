@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { TriageDedalusClient, type TriageSuggestion } from '../agent/triageDedalusClient';
 import { alerts, beds, patients as seededPatients, rooms } from '../data/mock';
 import { buildTriageEntries, getTriagePalette, type TriageEntry, type TriageLevel } from '../logic/triage';
 import { realtimeBus } from '../services/realtime';
@@ -7,6 +8,54 @@ import { fetchPatients, type PatientRecord } from '../services/patientApi';
 import { store } from '../services/store';
 
 type FilterLevel = 'ALL' | TriageLevel;
+type DedalusState = 'OFF' | 'READY' | 'APPLYING' | 'ERROR';
+
+const levelRank: Record<TriageLevel, number> = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  CRITICAL: 4
+};
+
+const levelScore: Record<TriageLevel, number> = {
+  LOW: 20,
+  MEDIUM: 40,
+  HIGH: 60,
+  CRITICAL: 80
+};
+
+function mergeDedalusSuggestion(
+  entry: TriageEntry,
+  suggestion: TriageSuggestion | undefined
+): TriageEntry {
+  if (!suggestion) {
+    if (!entry.roomAssigned && levelRank[entry.level] < levelRank.MEDIUM) {
+      return {
+        ...entry,
+        level: 'MEDIUM',
+        score: Math.max(entry.score, 30),
+        reasons: [...entry.reasons, 'No room assignment: minimum triage level set to MEDIUM'].slice(0, 5)
+      };
+    }
+    return entry;
+  }
+
+  const weightedScore = Math.round(entry.score * 0.45 + levelScore[suggestion.level] * 0.55);
+  let nextLevel = suggestion.level;
+  let nextScore = Math.max(0, Math.min(100, weightedScore));
+
+  if (!entry.roomAssigned && levelRank[nextLevel] < levelRank.MEDIUM) {
+    nextLevel = 'MEDIUM';
+    nextScore = Math.max(nextScore, 30);
+  }
+
+  return {
+    ...entry,
+    level: nextLevel,
+    score: nextScore,
+    reasons: [`Dedalus triage signal: ${suggestion.rationale}`, ...entry.reasons].slice(0, 5)
+  };
+}
 
 export function TriagePage() {
   const [patients, setPatients] = useState<PatientRecord[]>([]);
@@ -15,6 +64,10 @@ export function TriagePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<FilterLevel>('ALL');
   const [loading, setLoading] = useState(true);
+  const [dedalusSuggestions, setDedalusSuggestions] = useState<Record<string, TriageSuggestion>>({});
+  const [dedalusState, setDedalusState] = useState<DedalusState>('OFF');
+  const dedalusRef = useRef(new TriageDedalusClient());
+  const lastSignatureRef = useRef('');
 
   useEffect(() => {
     let active = true;
@@ -58,9 +111,64 @@ export function TriagePage() {
     [alertsVersion, messagesVersion, patients]
   );
 
+  useEffect(() => {
+    const client = dedalusRef.current;
+    if (!client.isConfigured()) {
+      setDedalusSuggestions({});
+      setDedalusState('OFF');
+      return;
+    }
+    if (!triageEntries.length) {
+      setDedalusSuggestions({});
+      setDedalusState('READY');
+      return;
+    }
+
+    const signature = triageEntries
+      .map((entry) =>
+        [
+          entry.patientId,
+          entry.score,
+          entry.level,
+          entry.roomAssigned ? '1' : '0',
+          entry.openAlertCount,
+          entry.unreadPatientMessages,
+          entry.latestPatientMessage.slice(0, 120),
+          entry.patientMessageSignalScore,
+          entry.patientMessageSummary.slice(0, 120)
+        ].join(':')
+      )
+      .join('|');
+    if (signature === lastSignatureRef.current) {
+      return;
+    }
+    lastSignatureRef.current = signature;
+    let cancelled = false;
+    setDedalusState('APPLYING');
+    void client
+      .evaluate(triageEntries)
+      .then((result) => {
+        if (cancelled) return;
+        setDedalusSuggestions(result);
+        setDedalusState('READY');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDedalusState('ERROR');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [triageEntries]);
+
+  const resolvedEntries = useMemo(
+    () => triageEntries.map((entry) => mergeDedalusSuggestion(entry, dedalusSuggestions[entry.patientId])),
+    [dedalusSuggestions, triageEntries]
+  );
+
   const filteredEntries = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
-    return triageEntries.filter((entry) => {
+    return resolvedEntries.filter((entry) => {
       const levelMatches = filterLevel === 'ALL' || entry.level === filterLevel;
       const searchMatches =
         !normalized ||
@@ -70,16 +178,16 @@ export function TriagePage() {
         entry.bedLabel.toLowerCase().includes(normalized);
       return levelMatches && searchMatches;
     });
-  }, [filterLevel, searchTerm, triageEntries]);
+  }, [filterLevel, resolvedEntries, searchTerm]);
 
   const counts = useMemo(
     () => ({
-      critical: triageEntries.filter((entry) => entry.level === 'CRITICAL').length,
-      high: triageEntries.filter((entry) => entry.level === 'HIGH').length,
-      medium: triageEntries.filter((entry) => entry.level === 'MEDIUM').length,
-      low: triageEntries.filter((entry) => entry.level === 'LOW').length
+      critical: resolvedEntries.filter((entry) => entry.level === 'CRITICAL').length,
+      high: resolvedEntries.filter((entry) => entry.level === 'HIGH').length,
+      medium: resolvedEntries.filter((entry) => entry.level === 'MEDIUM').length,
+      low: resolvedEntries.filter((entry) => entry.level === 'LOW').length
     }),
-    [triageEntries]
+    [resolvedEntries]
   );
 
   const renderCard = (entry: TriageEntry) => {
@@ -141,6 +249,18 @@ export function TriagePage() {
         <h2 className="text-xl font-display font-semibold text-ink-900">Triage Board</h2>
         <p className="mt-1 text-sm text-ink-500">
           Color-coded symptom severity classification for rapid prioritization.
+        </p>
+        <p className="mt-2 text-xs text-ink-500">
+          Dedalus triage assist:{' '}
+          <span className="font-semibold text-ink-700">
+            {dedalusState === 'OFF'
+              ? 'OFF'
+              : dedalusState === 'APPLYING'
+                ? 'Applying'
+                : dedalusState === 'ERROR'
+                  ? 'Fallback to local scoring'
+                  : 'Active'}
+          </span>
         </p>
       </header>
 

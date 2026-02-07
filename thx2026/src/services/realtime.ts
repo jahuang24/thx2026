@@ -5,6 +5,7 @@ type EventName =
   | 'bedOccupancyUpdated'
   | 'newAlert'
   | 'alertUpdated'
+  | 'agentFeedUpdated'
   | 'taskUpdated'
   | 'newMessage'
   | 'messageUpdated'

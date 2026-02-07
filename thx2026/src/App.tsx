@@ -20,6 +20,7 @@ import { TasksPage } from './pages/Tasks';
 import { TriagePage } from './pages/Triage';
 import { PatientsIndexPage } from './pages/patients/PatientsIndex';
 import { startCvSimulator } from './services/cvSimulator';
+import { startOperationalSignalsWatcher } from './services/operationalSignals';
 import { MonitorStoreProvider } from './store/monitorStore';
 import './App.css';
 
@@ -29,6 +30,11 @@ function App() {
       rooms.map((room) => room.id),
       sensors.map((sensor) => sensor.id)
     );
+    return () => stop();
+  }, []);
+
+  useEffect(() => {
+    const stop = startOperationalSignalsWatcher();
     return () => stop();
   }, []);
 
