@@ -1,6 +1,24 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 
 export function Login() {
+
+  useEffect(() => {
+    async function getMessages() {
+      const response = await fetch(`http://localhost:5050/messages/`);
+      if (!response.ok) {
+        const message = `An error occurred: ${response.statusText}`;
+        console.error(message);
+        return;
+      }
+      console.log('Messages fetched successfully');
+      const messages = await response.json();
+      console.log(messages);
+    }
+    getMessages();
+    return;
+  }, []);
+
   const navigate = useNavigate();
 
   return (
