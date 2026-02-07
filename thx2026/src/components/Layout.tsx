@@ -4,7 +4,7 @@ import { currentUser } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children, pageTitle }: { children: React.ReactNode; pageTitle?: string }) {
   const [messages, setMessages] = useState(store.messages);
 
   useEffect(() => {
@@ -77,7 +77,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <header className="flex flex-col gap-2 border-b border-white/70 bg-white/70 px-8 py-6 backdrop-blur">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-display font-semibold text-ink-950">Operational Dashboard</h1>
+                <h1 className="text-2xl font-display font-semibold text-ink-950">
+                  Operational Dashboard {'> '}  
+                  { pageTitle}
+                </h1>
               </div>
             </div>
           </header>
