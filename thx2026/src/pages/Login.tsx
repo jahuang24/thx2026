@@ -5,24 +5,31 @@ export function Login() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-screen flex-col items-center">
-      {/* This pushes the banner to the bottom */}
-      <div className="flex-grow" />
+    <div className="relative flex min-h-screen flex-col items-center">
+      
+      <div className="flex flex-grow flex-col items-center justify-center px-6 text-center text-ink-950">
+          <h1 className="text-8xl font-display font-bold tracking-tigh p-12">
+            Baywatch
+          </h1>
+          <p className="mx-auto text-2xl">
+            Centralized medical dashboard and patient portal.
+          </p>
+      </div>
 
-      {/* Bottom Banner with Blur - Increased padding to py-20 and blur to xl */}
-      <div className="w-full border-t border-white/30 bg-white/20 py-16 backdrop-blur-xl">
-        {/* Increased gap between buttons */}
-        <div className="flex flex-col items-center justify-center gap-16 px-6 sm:flex-row">
+      {/* Bottom Banner with Glassy Effect */}
+      <div className="w-full border-t border-white/40 bg-white/30 py-14 backdrop-blur-sm backdrop-saturate-150">
+        <div className="flex flex-col items-center justify-center gap-20 px-6 sm:flex-row">
+
           <button
             onClick={() => navigate('/doctor-login')}
-            className="min-w-[200px] rounded-full bg-ink-900 px-12 py-5 text-lg font-semibold text-white transition hover:bg-ink-800 shadow-xl"
+            className="min-w-[240px] rounded-full bg-ink-900 px-12 py-5 text-lg font-semibold text-white transition-all hover:bg-ink-800 hover:shadow-2xl active:scale-95 shadow-xl"
           >
-            Doctor Login
+            Hospital Portal
           </button>
           
           <button
             onClick={() => navigate('/patient-login')}
-            className="min-w-[200px] rounded-full border border-ink-200 bg-white px-12 py-5 text-lg font-semibold text-ink-900 transition hover:bg-ink-50 shadow-xl"
+            className="min-w-[240px] rounded-full border border-ink-200 bg-white px-12 py-5 text-lg font-semibold text-ink-900 transition-all hover:bg-ink-50 hover:shadow-2xl active:scale-95 shadow-xl"
           >
             Patient Portal
           </button>
