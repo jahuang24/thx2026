@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { TopNav } from './components/TopNav';
 import { sensors, rooms } from './data/mock';
 import { AdminPage } from './pages/Admin';
 import { AdmissionsPage } from './pages/Admissions';
@@ -46,10 +45,11 @@ function App() {
       <Route
         path="/monitor"
         element={
-          <MonitorStoreProvider>
-            <TopNav />
-            <PatientMonitorPage />
-          </MonitorStoreProvider>
+          <Layout>
+            <MonitorStoreProvider>
+              <PatientMonitorPage />
+            </MonitorStoreProvider>
+          </Layout>
         }
       />
       <Route

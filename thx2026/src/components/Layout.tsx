@@ -25,6 +25,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { path: '/doctor-dashboard', label: 'Unit Overview' },
+    { path: '/monitor', label: 'Patient Monitor' },
     { path: '/admissions', label: 'Admissions & Placement' },
     { path: '/tasks', label: 'Tasks' },
     { path: '/messages', label: 'Patient Messages', badge: unreadMessages },

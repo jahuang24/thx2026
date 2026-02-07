@@ -327,52 +327,79 @@ export function PatientMonitorPage() {
   }, [clearCalibrationTimers, stopMonitor]);
 
   return (
-    <div className="monitor-page">
-      <header className="monitor-page__header monitor-card">
-        <div>
-          <h2>Patient Monitor</h2>
-          <p className="monitor-disclaimer">Non-diagnostic. Flags observable behavior patterns only.</p>
-          <p className="monitor-agent-status">
-            Agent backend: <strong>{agentBackendLabel}</strong>
-            {agentBackendError ? ` (fallback active: ${agentBackendError})` : ''}
-          </p>
-        </div>
-        <div className="monitor-controls">
-          <button type="button" className="btn" onClick={startMonitor} disabled={state.monitorRunning || starting}>
-            Start
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={stopMonitor} disabled={!state.monitorRunning && !starting}>
-            Stop
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={calibrate} disabled={!state.monitorRunning || calibrating}>
-            {calibrating ? `Calibrating (${calibrationRemaining}s)` : 'Calibrate'}
-          </button>
-          <button type="button" className="btn btn--danger" onClick={resetAll}>
-            Reset
-          </button>
+    <div className="space-y-6">
+      <header className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-panel">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-display font-semibold text-ink-900">Patient Monitor</h2>
+            <p className="mt-1 text-sm text-ink-500">
+              Non-diagnostic. Flags observable behavior patterns only.
+            </p>
+            <p className="mt-2 text-xs text-ink-400">
+              Agent backend: <span className="font-semibold text-ink-700">{agentBackendLabel}</span>
+              {agentBackendError ? ` (fallback active: ${agentBackendError})` : ''}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-full bg-ink-950 px-4 py-2 text-xs font-semibold text-white"
+              onClick={startMonitor}
+              disabled={state.monitorRunning || starting}
+            >
+              Start
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-ink-200 px-4 py-2 text-xs font-semibold text-ink-700"
+              onClick={stopMonitor}
+              disabled={!state.monitorRunning && !starting}
+            >
+              Stop
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-ink-200 px-4 py-2 text-xs font-semibold text-ink-700"
+              onClick={calibrate}
+              disabled={!state.monitorRunning || calibrating}
+            >
+              {calibrating ? `Calibrating (${calibrationRemaining}s)` : 'Calibrate'}
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700"
+              onClick={resetAll}
+            >
+              Reset
+            </button>
+          </div>
         </div>
       </header>
 
-      <section className="monitor-overview-grid">
-        <article className="monitor-card monitor-overview-card">
-          <h3>Subjects tracked</h3>
-          <strong>{state.subjects.length}</strong>
-          <p>{activeSubjects} active right now</p>
-        </article>
-        <article className="monitor-card monitor-overview-card">
-          <h3>Feed messages</h3>
-          <strong>{state.agentFeed.length}</strong>
-          <p>{highSeverityAlerts} high-severity</p>
-        </article>
-        <article className="monitor-card monitor-overview-card">
-          <h3>Monitor state</h3>
-          <strong>{state.monitorRunning ? 'Running' : 'Stopped'}</strong>
-          <p>{state.monitorRunning ? 'Streaming derived signals' : 'Awaiting start'}</p>
-        </article>
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Subjects Tracked</p>
+          <p className="mt-3 text-2xl font-semibold text-ink-900">{state.subjects.length}</p>
+          <p className="mt-1 text-xs text-ink-500">{activeSubjects} active right now</p>
+        </div>
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Feed Messages</p>
+          <p className="mt-3 text-2xl font-semibold text-ink-900">{state.agentFeed.length}</p>
+          <p className="mt-1 text-xs text-ink-500">{highSeverityAlerts} high-severity</p>
+        </div>
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Monitor State</p>
+          <p className="mt-3 text-2xl font-semibold text-ink-900">
+            {state.monitorRunning ? 'Running' : 'Stopped'}
+          </p>
+          <p className="mt-1 text-xs text-ink-500">
+            {state.monitorRunning ? 'Streaming derived signals' : 'Awaiting start'}
+          </p>
+        </div>
       </section>
 
-      <section className="monitor-workspace">
-        <div className="monitor-workspace__tracker">
+      <section className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
           <PatientTrackerPanel
             videoRef={videoRef}
             debugCanvasRef={debugCanvasRef}
@@ -391,15 +418,14 @@ export function PatientMonitorPage() {
             onInjectScenario={injectScenario}
           />
         </div>
-        <div className="monitor-workspace__feed">
+        <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
           <AgentFeedPanel messages={state.agentFeed} />
         </div>
       </section>
 
       {!selectedSubject ? (
-        <div className="monitor-card empty-state">
-          <h3>No subject selected</h3>
-          <p>Select a subject from the tracker panel to continue.</p>
+        <div className="rounded-2xl border border-dashed border-ink-200 bg-white/80 p-4 text-sm text-ink-500">
+          No subject selected. Select a subject from the tracker panel to continue.
         </div>
       ) : null}
     </div>
