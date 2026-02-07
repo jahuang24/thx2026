@@ -138,15 +138,17 @@ export function DoctorDashboard() {
 
   const floorplanRooms: FloorplanSlot[] = useMemo(
     () => [
-      { roomId: 'room-401', label: '401', points: [[0.524578, 0.346939], [0.524578, 0.260544], [0.333456, 0.261224], [0.380044, 0.346939]] },
-      { roomId: 'room-402', label: '402', points: [[0.526412, 0.260544], [0.526412, 0.347619], [0.668012, 0.347619], [0.668012, 0.260544]] },
-      { roomId: 'room-403', label: '403', points: [[0.669479, 0.260544], [0.669479, 0.347619], [0.811079, 0.347619], [0.811079, 0.260544]] },
-      { roomId: 'room-404', label: '404', points: [[0.812546, 0.260544], [0.812546, 0.347619], [0.954879, 0.347619], [0.954879, 0.260544]] },
+      // Main east–west hallway (measured from Floorplan.png at 2726×1470px)
+      { roomId: 'room-401', label: '401', points: [[0.357347, 0.350680], [0.357347, 0.255782], [0.525017, 0.255782], [0.525017, 0.350680]] },
+      { roomId: 'room-402', label: '402', points: [[0.526206, 0.255782], [0.526206, 0.350680], [0.667809, 0.350680], [0.667809, 0.255782]] },
+      { roomId: 'room-403', label: '403', points: [[0.668998, 0.255782], [0.668998, 0.350680], [0.811041, 0.350680], [0.811041, 0.255782]] },
+      { roomId: 'room-404', label: '404', points: [[0.812230, 0.255782], [0.812230, 0.350680], [0.954842, 0.350680], [0.954842, 0.255782]] },
+      // Diagonal branch kept from prior layout; update once we re-digitize that wing
       { roomId: 'room-405', label: '405', points: [[0.330888, 0.266667], [0.245415, 0.42381], [0.290536, 0.508844], [0.376009, 0.35102]] },
-      { roomId: 'room-406', label: '406', points: [[0.396185, 0.382993], [0.396185, 0.492517], [0.524945, 0.492517], [0.524945, 0.382993]] },
-      { roomId: 'room-407', label: '407', points: [[0.526412, 0.382993], [0.526412, 0.492517], [0.668012, 0.492517], [0.668012, 0.382993]] },
-      { roomId: 'room-408', label: '408', points: [[0.669479, 0.382993], [0.669479, 0.492517], [0.811079, 0.492517], [0.811079, 0.382993]] },
-      { roomId: 'room-409', label: '409', points: [[0.812913, 0.382993], [0.812913, 0.492517], [0.954512, 0.492517], [0.954512, 0.382993]] },
+      { roomId: 'room-406', label: '406', points: [[0.396036, 0.379592], [0.396036, 0.496599], [0.525017, 0.496599], [0.525017, 0.379592]] },
+      { roomId: 'room-407', label: '407', points: [[0.526206, 0.379592], [0.526206, 0.496599], [0.667809, 0.496599], [0.667809, 0.379592]] },
+      { roomId: 'room-408', label: '408', points: [[0.668998, 0.379592], [0.668998, 0.496599], [0.811041, 0.496599], [0.811041, 0.379592]] },
+      { roomId: 'room-409', label: '409', points: [[0.812596, 0.379592], [0.812596, 0.496599], [0.954420, 0.496599], [0.954420, 0.379592]] },
       { roomId: 'room-410', label: '410', points: [[0.392517, 0.387075], [0.309611, 0.540816], [0.337858, 0.595238], [0.392517, 0.495238]] },
       { roomId: 'room-411', label: '411', points: [[0.243947, 0.427211], [0.158474, 0.585034], [0.203595, 0.669388], [0.289068, 0.512245]] },
       { roomId: 'room-412', label: '412', points: [[0.308144, 0.543537], [0.220836, 0.704762], [0.24945, 0.758503], [0.336757, 0.597279]] },
@@ -158,42 +160,120 @@ export function DoctorDashboard() {
 
   // Corridor graph for precise routing along hall centerlines.
   const corridorGraph: GraphMap = useMemo(() => {
-    const nodes: GraphMap['nodes'] = {
-      tail: { id: 'tail', x: 0.22, y: 0.9 },
-      mid1: { id: 'mid1', x: 0.28, y: 0.74 },
-      mid2: { id: 'mid2', x: 0.36, y: 0.57 },
-      elbow: { id: 'elbow', x: 0.46, y: 0.34 },
-      top1: { id: 'top1', x: 0.62, y: 0.32 },
-      top2: { id: 'top2', x: 0.78, y: 0.32 },
-      top3: { id: 'top3', x: 0.93, y: 0.32 },
-      rightLower: { id: 'rightLower', x: 0.93, y: 0.4 }
-    };
-
-    const edge = (from: GraphNodeId, to: GraphNodeId) => ({ from, to, weight: 1, bidirectional: true });
-    const edges = [
-      edge('tail', 'mid1'),
-      edge('mid1', 'mid2'),
-      edge('mid2', 'elbow'),
-      edge('elbow', 'top1'),
-      edge('top1', 'top2'),
-      edge('top2', 'top3'),
-      edge('top3', 'rightLower')
+    // centerline points extracted from Floorplan.png (white corridor run midpoints)
+    const centerline: Array<{ id: GraphNodeId; x: number; y: number }> = [
+      { id: 'c0', x: 0.118122, y: 0.841156 },
+      { id: 'c1', x: 0.191489, y: 0.725170 },
+      { id: 'c2', x: 0.264857, y: 0.589116 },
+      { id: 'c3', x: 0.338225, y: 0.453061 },
+      { id: 'c4', x: 0.411592, y: 0.364626 },
+      { id: 'c5', x: 0.484960, y: 0.364626 },
+      { id: 'c6', x: 0.558327, y: 0.364626 },
+      { id: 'c7', x: 0.631695, y: 0.364626 },
+      { id: 'c8', x: 0.705062, y: 0.364626 },
+      { id: 'c9', x: 0.778430, y: 0.364626 },
+      { id: 'c10', x: 0.851798, y: 0.364626 },
+      { id: 'c11', x: 0.925165, y: 0.364626 }
     ];
+
+    const nodes: GraphMap['nodes'] = Object.fromEntries(
+      centerline.map((pt) => [pt.id, { id: pt.id, x: pt.x, y: pt.y }])
+    );
+
+    const edges: GraphMap['edges'] = centerline.slice(1).map((pt, idx) => ({
+      from: centerline[idx].id,
+      to: pt.id,
+      weight: 1,
+      bidirectional: true
+    }));
 
     return { kind: 'graph', nodes, edges };
   }, []);
 
-  const nearestCorridorNode = (point: { x: number; y: number }) => {
-    let best: { id: GraphNodeId; dist: number } | null = null;
-    Object.values(corridorGraph.nodes).forEach((node) => {
-      const typed = node as { id: GraphNodeId; x?: number; y?: number };
-      if (typed.x === undefined || typed.y === undefined) return;
-      const dx = point.x - typed.x;
-      const dy = point.y - typed.y;
-      const d = dx * dx + dy * dy;
-      if (!best || d < best.dist) best = { id: typed.id, dist: d };
+  type CorridorAnchor = {
+    point: Coordinate;
+    edge: [GraphNodeId, GraphNodeId];
+  };
+
+  const distance = (a: Coordinate, b: Coordinate) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  const projectToSegment = (p: Coordinate, a: Coordinate, b: Coordinate) => {
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const apx = p.x - a.x;
+    const apy = p.y - a.y;
+    const abLen2 = abx * abx + aby * aby || 1e-9;
+    const t = Math.min(1, Math.max(0, (apx * abx + apy * aby) / abLen2));
+    return { x: a.x + abx * t, y: a.y + aby * t };
+  };
+
+  const nearestCorridorAnchor = (point: Coordinate): CorridorAnchor | null => {
+    let best: { anchor: CorridorAnchor; dist2: number } | null = null;
+    corridorGraph.edges.forEach((edge) => {
+      const from = corridorGraph.nodes[edge.from];
+      const to = corridorGraph.nodes[edge.to];
+      if (from?.x === undefined || from?.y === undefined || to?.x === undefined || to?.y === undefined) return;
+      const projected = projectToSegment(point, { x: from.x, y: from.y }, { x: to.x, y: to.y });
+      const dx = point.x - projected.x;
+      const dy = point.y - projected.y;
+      const dist2 = dx * dx + dy * dy;
+      if (!best || dist2 < best.dist2) {
+        best = { anchor: { point: projected, edge: [edge.from, edge.to] }, dist2 };
+      }
     });
-    return best?.id ?? null;
+    return best?.anchor ?? null;
+  };
+
+  const anchorEdges = (id: GraphNodeId, anchor: CorridorAnchor) => {
+    const [aId, bId] = anchor.edge;
+    const aNode = corridorGraph.nodes[aId];
+    const bNode = corridorGraph.nodes[bId];
+    const edges: GraphMap['edges'] = [];
+    if (aNode?.x !== undefined && aNode?.y !== undefined) {
+      edges.push({
+        from: id,
+        to: aId,
+        weight: distance(anchor.point, { x: aNode.x, y: aNode.y }),
+        bidirectional: true
+      });
+    }
+    if (bNode?.x !== undefined && bNode?.y !== undefined) {
+      edges.push({
+        from: id,
+        to: bId,
+        weight: distance(anchor.point, { x: bNode.x, y: bNode.y }),
+        bidirectional: true
+      });
+    }
+    return edges;
+  };
+
+  const buildCorridorPath = (start: CorridorAnchor, end: CorridorAnchor) => {
+    const startId: GraphNodeId = '__start_click__';
+    const endId: GraphNodeId = '__end_click__';
+    const nodes: GraphMap['nodes'] = {
+      ...corridorGraph.nodes,
+      [startId]: { id: startId, x: start.point.x, y: start.point.y },
+      [endId]: { id: endId, x: end.point.x, y: end.point.y }
+    };
+    const edges: GraphMap['edges'] = [
+      ...corridorGraph.edges,
+      ...anchorEdges(startId, start),
+      ...anchorEdges(endId, end)
+    ];
+    const graph: GraphMap = { kind: 'graph', nodes, edges };
+    const res = shortestPath(graph, startId, endId);
+    if (!res.reachable) {
+      return { coords: [] as Coordinate[], error: res.reason ?? 'No path found' };
+    }
+    const coords = (res.path as GraphNodeId[])
+      .map((nodeId) => {
+        const node = graph.nodes[nodeId];
+        if (node?.x === undefined || node?.y === undefined) return null;
+        return { x: node.x, y: node.y };
+      })
+      .filter(Boolean) as Coordinate[];
+    return { coords, error: null as string | null };
   };
 
   const labels = useMemo(() => {
@@ -239,8 +319,8 @@ export function DoctorDashboard() {
   const MAX_ZOOM = 3.5;
 
   // Path selection state
-  const [startNodeId, setStartNodeId] = useState<GraphNodeId | null>(null);
-  const [endNodeId, setEndNodeId] = useState<GraphNodeId | null>(null);
+  const [startAnchor, setStartAnchor] = useState<CorridorAnchor | null>(null);
+  const [endAnchor, setEndAnchor] = useState<CorridorAnchor | null>(null);
   const [pathCoords, setPathCoords] = useState<Coordinate[]>([]);
   const [pathError, setPathError] = useState<string | null>(null);
   const [pathMode, setPathMode] = useState(false);
@@ -316,45 +396,47 @@ export function DoctorDashboard() {
     event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
-  const handleFloorplanClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
-    if (!pathMode) return; // ignore when not in Find Path mode
+  const selectPathPoint = (clientX: number, clientY: number) => {
     if (!floorplanRef.current) return;
     const rect = floorplanRef.current.getBoundingClientRect();
-    const x = clamp01((event.clientX - rect.left - pan.x) / (rect.width * zoom));
-    const y = clamp01((event.clientY - rect.top - pan.y) / (rect.height * zoom));
-    const nearest = nearestCorridorNode({ x, y });
-    if (!nearest) return;
+    const x = clamp01((clientX - rect.left - pan.x) / (rect.width * zoom));
+    const y = clamp01((clientY - rect.top - pan.y) / (rect.height * zoom));
+    const anchor = nearestCorridorAnchor({ x, y });
+    if (!anchor) return;
 
-    // toggle selection: first click sets start, second sets destination, third resets
-    if (!startNodeId) {
-      setStartNodeId(nearest);
-      setEndNodeId(null);
+    // first click sets start
+    if (!startAnchor) {
+      setStartAnchor(anchor);
+      setEndAnchor(null);
       setPathCoords([]);
       setPathError(null);
       return;
     }
-    if (!endNodeId) {
-      setEndNodeId(nearest);
-      const res = shortestPath(corridorGraph, startNodeId, nearest);
-      if (!res.reachable) {
-        setPathError(res.reason ?? 'No path found');
+
+    // second click sets end and computes path
+    if (!endAnchor) {
+      setEndAnchor(anchor);
+      const { coords, error } = buildCorridorPath(startAnchor, anchor);
+      if (error) {
+        setPathError(error);
         setPathCoords([]);
       } else {
         setPathError(null);
-        const coords = (res.path as GraphNodeId[]).map((id) => {
-          const node = corridorGraph.nodes[id];
-          return { x: node.x ?? 0, y: node.y ?? 0 };
-        });
         setPathCoords(coords);
       }
       return;
     }
 
-    // Third click resets to start a new selection cycle
-    setStartNodeId(nearest);
-    setEndNodeId(null);
+    // third click starts over with new start
+    setStartAnchor(anchor);
+    setEndAnchor(null);
     setPathCoords([]);
     setPathError(null);
+  };
+
+  const handleFloorplanClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
+    if (!pathMode) return; // ignore when not in Find Path mode
+    selectPathPoint(event.clientX, event.clientY);
   };
 
   return (
@@ -398,24 +480,40 @@ export function DoctorDashboard() {
               <div className="flex items-center gap-3 text-xs font-semibold text-ink-500">
                 <span className="text-ink-400">Click a room to open</span>
                 <div className="h-4 w-px bg-ink-100" aria-hidden />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPathMode((prev) => !prev);
-                    setStartNodeId(null);
-                    setEndNodeId(null);
-                    setPathCoords([]);
-                    setPathError(null);
-                  }}
-                  className={`rounded-full border px-3 py-1 transition ${
-                    pathMode
-                      ? 'border-ink-400 bg-ink-50 text-ink-800 shadow-sm'
-                      : 'border-ink-200 bg-white text-ink-500 hover:bg-ink-50'
-                  }`}
-                  aria-pressed={pathMode}
-                >
-                  {pathMode ? 'Find Path: On' : 'Find Path: Off'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPathMode((prev) => !prev);
+                      setStartAnchor(null);
+                      setEndAnchor(null);
+                      setPathCoords([]);
+                      setPathError(null);
+                    }}
+                    className={`rounded-full border px-3 py-1 transition ${
+                      pathMode
+                        ? 'border-ink-400 bg-ink-50 text-ink-800 shadow-sm'
+                        : 'border-ink-200 bg-white text-ink-500 hover:bg-ink-50'
+                    }`}
+                    aria-pressed={pathMode}
+                  >
+                    {pathMode ? 'Find Path: On' : 'Find Path: Off'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPathMode(false);
+                      setStartAnchor(null);
+                      setEndAnchor(null);
+                      setPathCoords([]);
+                      setPathError(null);
+                    }}
+                    className="rounded-full border px-3 py-1 text-ink-900 transition hover:bg-ink-100/70"
+                    aria-label="Clear path"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
             </div>
             <div
@@ -449,20 +547,6 @@ export function DoctorDashboard() {
                 >
                   +
                 </button>
-                <button
-                  type="button"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => {
-                    setStartNodeId(null);
-                    setEndNodeId(null);
-                    setPathCoords([]);
-                    setPathError(null);
-                  }}
-                  className="h-9 px-3 rounded-full text-xs font-semibold text-ink-900 hover:bg-ink-100/70"
-                  aria-label="Clear path"
-                >
-                  Clear
-                </button>
               </div>
               <div
                 className="absolute inset-0"
@@ -477,43 +561,6 @@ export function DoctorDashboard() {
                   className="absolute inset-0 h-full w-full object-contain"
                 />
                 <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
-                  {/* Draw computed path */}
-                  {pathCoords.length > 1 && (
-                    <polyline
-                      points={pathCoords.map((c) => `${c.x},${c.y}`).join(' ')}
-                      fill="none"
-                      stroke="#0f172a"
-                      strokeWidth="0.006"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  )}
-
-                  {/* Start & end markers */}
-                  {startNodeId && corridorGraph.nodes[startNodeId] && (
-                    <circle
-                      cx={corridorGraph.nodes[startNodeId].x}
-                      cy={corridorGraph.nodes[startNodeId].y}
-                      r={0.006}
-                      fill="#10b981"
-                      stroke="#0f172a"
-                      strokeWidth="0.0025"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  )}
-                  {endNodeId && corridorGraph.nodes[endNodeId] && (
-                    <circle
-                      cx={corridorGraph.nodes[endNodeId].x}
-                      cy={corridorGraph.nodes[endNodeId].y}
-                      r={0.006}
-                      fill="#ef4444"
-                      stroke="#0f172a"
-                      strokeWidth="0.0025"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  )}
-
                   {floorplanRooms.map((slot) => {
                     const room = derivedRooms.find((item) => item.id === slot.roomId);
                     if (!room) return null;
@@ -554,6 +601,61 @@ export function DoctorDashboard() {
                       </g>
                     );
                   })}
+
+                  {/* Draw computed path on top of rooms */}
+                  {pathCoords.length > 1 && (
+                    <>
+                      {/* ultra-thick black stroke with white underlay for maximum contrast */}
+                      <polyline
+                        points={pathCoords.map((c) => `${c.x},${c.y}`).join(' ')}
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                        style={{ pointerEvents: 'none', strokeOpacity: 0.9 }}
+                      />
+                      <polyline
+                        points={pathCoords.map((c) => `${c.x},${c.y}`).join(' ')}
+                        fill="none"
+                        stroke="#111827"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                        style={{ pointerEvents: 'none', strokeOpacity: 0.98 }}
+                      />
+                    </>
+                  )}
+
+                  {/* Only show start and end markers; no intermediate dots */}
+
+                  {/* Start & end markers (snapped to corridor nodes) */}
+                  {pathMode && startAnchor && (
+                    <circle
+                      cx={startAnchor.point.x}
+                      cy={startAnchor.point.y}
+                      r={0.010}
+                      fill="#10b981"
+                      stroke="#0f172a"
+                      strokeWidth="0.0025"
+                      vectorEffect="non-scaling-stroke"
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  )}
+                  {pathMode && endAnchor && (
+                    <circle
+                      cx={endAnchor.point.x}
+                      cy={endAnchor.point.y}
+                      r={0.010}
+                      fill="#ef4444"
+                      stroke="#0f172a"
+                      strokeWidth="0.0025"
+                      vectorEffect="non-scaling-stroke"
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  )}
                 </svg>
                 <div className="pointer-events-none absolute inset-0">
                   {labels.map((label) => (

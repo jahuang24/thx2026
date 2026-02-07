@@ -19,8 +19,7 @@ export const currentUser: User = {
 };
 
 export const units: Unit[] = [
-  { id: 'unit-a', name: 'North Tower 4A', floor: '4' },
-  { id: 'unit-b', name: 'North Tower 4B', floor: '4' }
+  { id: 'unit-a', name: 'North Tower 4A', floor: '4' }
 ];
 
 export const rooms: Room[] = [
@@ -66,7 +65,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-405',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '405',
     type: 'ISOLATION',
     status: 'READY',
@@ -76,7 +75,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-406',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '406',
     type: 'MED_SURG',
     status: 'READY',
@@ -86,7 +85,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-407',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '407',
     type: 'OBS',
     status: 'NOT_READY',
@@ -116,7 +115,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-410',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '410',
     type: 'OBS',
     status: 'READY',
@@ -126,7 +125,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-411',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '411',
     type: 'ISOLATION',
     status: 'NOT_READY',
@@ -146,7 +145,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-413',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '413',
     type: 'OBS',
     status: 'CLEANING',
@@ -156,7 +155,7 @@ export const rooms: Room[] = [
   },
   {
     id: 'room-414',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     roomNumber: '414',
     type: 'MED_SURG',
     status: 'READY',
@@ -209,7 +208,7 @@ export const patients: Patient[] = [
     mobilityRisk: 'MEDIUM',
     fallRisk: false,
     notes: 'Respiratory monitoring. Call light within reach.',
-    unitId: 'unit-b',
+    unitId: 'unit-a',
     bedId: 'bed-405a'
   },
   {
