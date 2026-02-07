@@ -14,6 +14,7 @@ const eventLabels: Record<AgentMessage['evidence']['recentEvents'][number]['type
   HAND_TO_TEMPLE: 'Hand-to-temple motion',
   FORWARD_LEAN: 'Forward lean',
   POSTURE_DROP: 'Posture drop',
+  MAJOR_POSTURE_SHIFT: 'Major posture shift',
   PROLONGED_EYE_CLOSURE: 'Prolonged eye closure',
   RESTLESSNESS_SPIKE: 'Restlessness spike',
   NO_SUBJECT: 'No subject detected'

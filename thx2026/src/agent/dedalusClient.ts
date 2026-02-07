@@ -50,6 +50,7 @@ const SYSTEM_PROMPT = [
   '- Possible fatigue/drowsiness-like pattern (non-diagnostic)',
   '- Possible distress-like pattern (non-diagnostic)',
   '- Possible restlessness/agitation-like pattern (non-diagnostic)',
+  'If eventSummary.recentNew or counts60s includes MAJOR_POSTURE_SHIFT, treat it as abrupt high-delta posture movement that may be brief and can still justify emitMessage=true.',
   'Keep output concise.'
 ].join('\n');
 
