@@ -45,6 +45,13 @@ export function PatientPortalPage() {
   const patient = getPatientSession();
   const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:5050';
 
+  const [voiceId, setVoiceId] = useState('wJ5MX7uuKXZwFqGdWM4N');
+
+  const AVAILABLE_VOICES = [
+    { id: 'wJ5MX7uuKXZwFqGdWM4N', name: 'Raj' },
+    { id: 'fO96OTVqTn6bBvyybd7U', name: 'Kermit' },
+  ];
+
   useEffect(() => {
     if (!patient?.id) return;
     let active = true;
@@ -156,7 +163,8 @@ export function PatientPortalPage() {
       const response = await fetch(`${API_BASE}/patients/speak`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        // Pass voiceId here
+        body: JSON.stringify({ text, voiceId }) 
       });
 
       if (!response.ok) throw new Error("Voice failed");
@@ -647,6 +655,19 @@ export function PatientPortalPage() {
                       {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room not assigned'} · {assignedBed ? `Bed ${assignedBed.bedLabel}` : ''} · {patient.mrn}
                     </div>
                   </div>
+                </div>
+                
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-ink-400">Assistant Voice</label>
+                  <select 
+                    value={voiceId}
+                    onChange={(e) => setVoiceId(e.target.value)}
+                    className="rounded-lg border border-white/70 bg-white/50 px-2 py-1 text-xs text-ink-700 outline-none focus:border-ink-950"
+                  >
+                    {AVAILABLE_VOICES.map((v) => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="baymax-stage">
