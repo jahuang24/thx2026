@@ -1,5 +1,4 @@
 
-import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { patients } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
@@ -16,7 +15,7 @@ const SILENCE_MS = 1200;
 
 export function PatientPortalPage() {
 
-  const [micState, setMicState] = useState<MicState>('idle');
+  const [, setMicState] = useState<MicState>('idle');
   const [mode, setMode] = useState<Mode>('WAITING');
   const [captured, setCaptured] = useState('');
   const [error, setError] = useState<string | null>(null);
