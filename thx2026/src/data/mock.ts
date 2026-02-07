@@ -14,8 +14,8 @@ import type {
 
 export const currentUser: User = {
   id: 'user-1',
-  name: 'Jordan Lee',
-  role: 'Nurse'
+  name: 'Scotty the Dog',
+  role: 'Doctor'
 };
 
 export const units: Unit[] = [
@@ -222,6 +222,35 @@ export const patients: Patient[] = [
     notes: 'Awaiting admission. Needs telemetry.',
     unitId: 'unit-a'
   }
+];
+
+export const patientVitalsById: Record<
+  string,
+  {
+    heartRate: number;
+    respiration: number;
+    spo2: number;
+    bloodPressure: string;
+    temperatureF: number;
+  }
+> = {
+  'patient-1': { heartRate: 92, respiration: 20, spo2: 95, bloodPressure: '128/82', temperatureF: 99.1 },
+  'patient-2': { heartRate: 78, respiration: 16, spo2: 97, bloodPressure: '122/76', temperatureF: 98.4 },
+  'patient-3': { heartRate: 86, respiration: 18, spo2: 96, bloodPressure: '130/80', temperatureF: 98.9 }
+};
+
+export const vitalsPool: Array<{
+  heartRate: number;
+  respiration: number;
+  spo2: number;
+  bloodPressure: string;
+  temperatureF: number;
+}> = [
+  { heartRate: 72, respiration: 14, spo2: 98, bloodPressure: '118/74', temperatureF: 98.2 },
+  { heartRate: 88, respiration: 18, spo2: 96, bloodPressure: '126/80', temperatureF: 98.8 },
+  { heartRate: 96, respiration: 22, spo2: 94, bloodPressure: '134/86', temperatureF: 99.4 },
+  { heartRate: 80, respiration: 16, spo2: 97, bloodPressure: '120/78', temperatureF: 98.6 },
+  { heartRate: 104, respiration: 20, spo2: 95, bloodPressure: '138/90', temperatureF: 99.1 }
 ];
 
 export const admissions: Admission[] = [

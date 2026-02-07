@@ -12,6 +12,20 @@ const client = new MongoClient(uri, {
 /** @type {Db | null} */
 let db = null;
 
+async function ensureIndexes(database) {
+  try {
+    await Promise.all([
+      database.collection("Patients").createIndex({ createdAt: -1 }),
+      database.collection("Messages").createIndex({ sentAt: -1 }),
+      database.collection("Messages").createIndex({ patientId: 1, sentAt: -1 }),
+      database.collection("Admissions").createIndex({ requestedAt: -1 }),
+      database.collection("Admissions").createIndex({ patientId: 1, requestedAt: -1 })
+    ]);
+  } catch (err) {
+    console.error("Index creation failed:", err);
+  }
+}
+
 async function connectToDatabase() {
   try {
     console.log("Attempting to connect to MongoDB...");
@@ -24,6 +38,7 @@ async function connectToDatabase() {
     );
     
     db = client.db("fb407");
+    void ensureIndexes(db);
     return db;
   } catch(err) {
     console.error("Failed to connect to MongoDB:", err);

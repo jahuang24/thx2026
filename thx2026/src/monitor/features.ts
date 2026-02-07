@@ -36,6 +36,7 @@ const EVENT_COOLDOWN_MS: Record<MonitorEventType, number> = {
   HAND_TO_TEMPLE: 1800,
   FORWARD_LEAN: 6000,
   POSTURE_DROP: 10000,
+  MAJOR_POSTURE_SHIFT: 7000,
   PROLONGED_EYE_CLOSURE: 20000,
   RESTLESSNESS_SPIKE: 15000,
   NO_SUBJECT: 10000
@@ -49,6 +50,11 @@ const POSTURE_DROP_CONFIRM_MS = 1800;
 const POSTURE_DROP_CANCEL_MS = 4500;
 const POSTURE_DROP_STILLNESS_MAX = 0.14;
 const POSTURE_DROP_RECOVERY_DELTA_Y = 0.04;
+const POSTURE_CHANGE_VELOCITY = 0.02;
+const POSTURE_CHANGE_DELTA = 0.015;
+const POSTURE_CHANGE_REFRACTORY_MS = 850;
+const MAJOR_POSTURE_SHIFT_VELOCITY = 0.09;
+const MAJOR_POSTURE_SHIFT_DELTA = 0.065;
 
 function distance(a: NormalizedLandmark, b: NormalizedLandmark) {
   const dx = a.x - b.x;
@@ -115,6 +121,7 @@ export class RollingFeatureEngine {
   private latestFaceLandmarks: NormalizedLandmark[] | null = null;
   private latestFaceTs = 0;
   private postureDropCandidate: { armedAt: number; shoulderY: number } | null = null;
+  private lastPostureChangeTs = 0;
 
   reset() {
     this.lastTs = null;
@@ -134,6 +141,7 @@ export class RollingFeatureEngine {
     this.latestFaceLandmarks = null;
     this.latestFaceTs = 0;
     this.postureDropCandidate = null;
+    this.lastPostureChangeTs = 0;
   }
 
   ingest(frame: FeatureInputFrame): FeatureOutputFrame {
@@ -260,8 +268,25 @@ export class RollingFeatureEngine {
         const normalizedMovement = clamp01(postureVelocity * 4);
         this.movementSamples.push({ ts: nowTs, value: normalizedMovement });
 
-        if (postureVelocity >= 0.05) {
+        const postureShiftDetected =
+          postureVelocity >= POSTURE_CHANGE_VELOCITY || shoulderDelta >= POSTURE_CHANGE_DELTA;
+        const postureShiftCooledDown = nowTs - this.lastPostureChangeTs >= POSTURE_CHANGE_REFRACTORY_MS;
+        if (postureShiftDetected && postureShiftCooledDown) {
           this.postureChangeTimestamps.push(nowTs);
+          this.lastPostureChangeTs = nowTs;
+        }
+
+        const majorPostureShiftDetected =
+          postureVelocity >= MAJOR_POSTURE_SHIFT_VELOCITY || shoulderDelta >= MAJOR_POSTURE_SHIFT_DELTA;
+        if (majorPostureShiftDetected && this.shouldEmit('MAJOR_POSTURE_SHIFT', nowTs)) {
+          events.push(
+            createEvent(
+              frame.subjectId,
+              nowTs,
+              'MAJOR_POSTURE_SHIFT',
+              `Abrupt major posture shift detected (delta ${shoulderDelta.toFixed(3)}, velocity ${postureVelocity.toFixed(3)}).`
+            )
+          );
         }
 
         const dropDeltaY = shoulderMid.y - this.previousShoulderMid.y;

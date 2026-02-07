@@ -188,18 +188,42 @@ export function buildTriageEntries({
   const seededById = new Map(seededPatients.map((item) => [item.id, item]));
   const roomById = new Map(rooms.map((item) => [item.id, item]));
   const bedById = new Map(beds.map((item) => [item.id, item]));
+  const openAlertStatsByPatient = new Map<string, { total: number; high: number; medium: number; low: number }>();
+  const patientMessagesByPatient = new Map<string, Message[]>();
+  const unreadPatientMessageCount = new Map<string, number>();
+
+  alerts.forEach((alert) => {
+    if (alert.status !== 'OPEN' || !alert.patientId) return;
+    const existing = openAlertStatsByPatient.get(alert.patientId) ?? {
+      total: 0,
+      high: 0,
+      medium: 0,
+      low: 0
+    };
+    existing.total += 1;
+    if (alert.severity === 'HIGH') existing.high += 1;
+    if (alert.severity === 'MEDIUM') existing.medium += 1;
+    if (alert.severity === 'LOW') existing.low += 1;
+    openAlertStatsByPatient.set(alert.patientId, existing);
+  });
+
+  messages.forEach((message) => {
+    if (message.sender !== 'PATIENT' || !message.patientId) return;
+    const list = patientMessagesByPatient.get(message.patientId) ?? [];
+    list.push(message);
+    patientMessagesByPatient.set(message.patientId, list);
+    if (!message.readByNurse) {
+      unreadPatientMessageCount.set(message.patientId, (unreadPatientMessageCount.get(message.patientId) ?? 0) + 1);
+    }
+  });
 
   const entries = patients.map((patient) => {
     const roomId = normalizeRoomId(patient.roomId);
     const bedId = normalizeBedId(patient.bedId, roomId);
     const seeded = seededById.get(patient.id);
-    const openAlerts = alerts.filter((alert) => alert.status === 'OPEN' && alert.patientId === patient.id);
-    const patientMessages = messages.filter(
-      (message) => message.patientId === patient.id && message.sender === 'PATIENT'
-    );
-    const unreadPatientMessages = patientMessages.filter(
-      (message) => message.patientId === patient.id && message.sender === 'PATIENT' && !message.readByNurse
-    );
+    const alertStats = openAlertStatsByPatient.get(patient.id) ?? { total: 0, high: 0, medium: 0, low: 0 };
+    const patientMessages = patientMessagesByPatient.get(patient.id) ?? [];
+    const unreadCount = unreadPatientMessageCount.get(patient.id) ?? 0;
     const messageSignal = evaluatePatientMessageSignal(patientMessages);
 
     let score = acuityBaseScore(seeded?.acuityLevel);
@@ -224,19 +248,16 @@ export function buildTriageEntries({
       reasons.push('Fall risk flag present');
     }
 
-    const highAlerts = openAlerts.filter((alert) => alert.severity === 'HIGH').length;
-    const mediumAlerts = openAlerts.filter((alert) => alert.severity === 'MEDIUM').length;
-    const lowAlerts = openAlerts.filter((alert) => alert.severity === 'LOW').length;
-    score += clamp(0, highAlerts * 18, 36);
-    score += clamp(0, mediumAlerts * 10, 20);
-    score += clamp(0, lowAlerts * 5, 10);
-    if (openAlerts.length > 0) {
-      reasons.push(`${openAlerts.length} open alert(s)`);
+    score += clamp(0, alertStats.high * 18, 36);
+    score += clamp(0, alertStats.medium * 10, 20);
+    score += clamp(0, alertStats.low * 5, 10);
+    if (alertStats.total > 0) {
+      reasons.push(`${alertStats.total} open alert(s)`);
     }
 
-    score += clamp(0, unreadPatientMessages.length * 5, 15);
-    if (unreadPatientMessages.length > 0) {
-      reasons.push(`${unreadPatientMessages.length} unread patient message(s)`);
+    score += clamp(0, unreadCount * 5, 15);
+    if (unreadCount > 0) {
+      reasons.push(`${unreadCount} unread patient message(s)`);
     }
 
     score += messageSignal.score;
@@ -279,8 +300,8 @@ export function buildTriageEntries({
       score: finalScore,
       level,
       reasons: prioritizedReasons,
-      openAlertCount: openAlerts.length,
-      unreadPatientMessages: unreadPatientMessages.length
+      openAlertCount: alertStats.total,
+      unreadPatientMessages: unreadCount
     };
   });
 

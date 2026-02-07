@@ -113,8 +113,11 @@ export class AutonomousRelayAgent {
     const observedSignals = decision.observedSignals.length ? decision.observedSignals : fallback.observedSignals;
     const inCooldown = now < runtime.cooldownUntil;
 
-    // Keep emergency path conservative.
-    if (fallback.message?.severity === 'HIGH' && !decision.emitMessage) {
+    const hasUrgentFallbackEvent = input.newEvents.some(
+      (event) => event.type === 'POSTURE_DROP' || event.type === 'MAJOR_POSTURE_SHIFT'
+    );
+    // Keep emergency posture-event path conservative.
+    if (hasUrgentFallbackEvent && fallback.message && !decision.emitMessage) {
       return fallback;
     }
 
@@ -192,7 +195,9 @@ export class AutonomousRelayAgent {
       return false;
     }
 
-    const hasUrgentEvent = input.newEvents.some((event) => event.type === 'POSTURE_DROP');
+    const hasUrgentEvent = input.newEvents.some(
+      (event) => event.type === 'POSTURE_DROP' || event.type === 'MAJOR_POSTURE_SHIFT'
+    );
     if (hasUrgentEvent) {
       return true;
     }

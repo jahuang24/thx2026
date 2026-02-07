@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { MetricChips } from './MetricChips';
 import type { AgentMessage } from '../types/monitor';
 
 interface AgentMessageCardProps {
@@ -8,6 +7,27 @@ interface AgentMessageCardProps {
 
 function formatTimestamp(ts: number) {
   return new Date(ts).toLocaleTimeString();
+}
+
+const eventLabels: Record<AgentMessage['evidence']['recentEvents'][number]['type'], string> = {
+  HAND_TO_MOUTH: 'Hand-to-mouth motion',
+  HAND_TO_TEMPLE: 'Hand-to-temple motion',
+  FORWARD_LEAN: 'Forward lean',
+  POSTURE_DROP: 'Posture drop',
+  MAJOR_POSTURE_SHIFT: 'Major posture shift',
+  PROLONGED_EYE_CLOSURE: 'Prolonged eye closure',
+  RESTLESSNESS_SPIKE: 'Restlessness spike',
+  NO_SUBJECT: 'No subject detected'
+};
+
+function humanizeCriterion(criterion: string) {
+  return criterion
+    .replace(/PERCLOS/gi, 'Eye-closure')
+    .replace(/hand-to-mouth/gi, 'hand-to-mouth')
+    .replace(/forward lean/gi, 'forward lean')
+    .replace(/posture change/gi, 'posture change')
+    .replace(/movement/gi, 'movement')
+    .replace(/signal interpretation uncertain/gi, 'interpretation uncertain');
 }
 
 export function AgentMessageCard({ message }: AgentMessageCardProps) {
@@ -31,18 +51,17 @@ export function AgentMessageCard({ message }: AgentMessageCardProps) {
       <p className="agent-message-card__disclaimer">{message.disclaimer}</p>
 
       <button type="button" className="agent-message-card__toggle" onClick={() => setExpanded((current) => !current)}>
-        {expanded ? 'Hide evidence' : 'Show evidence'}
+        {expanded ? 'Hide details' : 'Show details'}
       </button>
 
       {expanded ? (
         <div className="agent-message-card__evidence">
-          <MetricChips metrics={message.evidence.metrics} />
           <div>
-            <h4>Criteria met</h4>
+            <h4>Indicators</h4>
             {message.evidence.criteriaMet.length ? (
               <ul>
                 {message.evidence.criteriaMet.map((criterion) => (
-                  <li key={criterion}>{criterion}</li>
+                  <li key={criterion}>{humanizeCriterion(criterion)}</li>
                 ))}
               </ul>
             ) : (
@@ -55,7 +74,8 @@ export function AgentMessageCard({ message }: AgentMessageCardProps) {
               <ul>
                 {message.evidence.recentEvents.map((event) => (
                   <li key={event.id}>
-                    <span>{new Date(event.ts).toLocaleTimeString()}</span> - <strong>{event.type}</strong>
+                    <span>{new Date(event.ts).toLocaleTimeString()}</span> -{' '}
+                    <strong>{eventLabels[event.type]}</strong>
                     {event.detail ? ` (${event.detail})` : ''}
                   </li>
                 ))}

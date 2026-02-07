@@ -26,17 +26,17 @@ export interface AgentThresholds {
 
 const DEFAULT_THRESHOLDS: AgentThresholds = {
   evaluationIntervalMs: 2000,
-  persistenceMs: 15000,
-  cooldownMs: 120000,
+  persistenceMs: 8000,
+  cooldownMs: 60000,
   nauseaHandToMouthPerMin: 2,
   nauseaHandEventsPerMinute: 3,
   nauseaForwardLeanSecondsPerMin: 15,
-  nauseaPostureChangePerMin: 5,
+  nauseaPostureChangePerMin: 3,
   postureDropStillnessSeconds: 5,
   drowsyPerclos: 0.25,
   lowMovement: 0.25,
   highMovement: 0.65,
-  highPostureChange: 7
+  highPostureChange: 4
 };
 
 export function buildThresholds(calibration: CalibrationProfile | null): AgentThresholds {

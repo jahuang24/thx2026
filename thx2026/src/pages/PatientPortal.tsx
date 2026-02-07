@@ -4,6 +4,7 @@ import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 import { clearPatientSession, getPatientSession } from '../services/patientSession';
 import { fetchPatientById, type PatientRecord } from '../services/patientApi';
+import { fetchMessagesForPatient } from '../services/messagesApi';
 import { useFacilityData } from '../hooks/useFacilityData';
 
 type SpeechRecognition = any;
@@ -13,7 +14,7 @@ type Mode = 'WAITING' | 'CAPTURING';
 type MicState = 'idle' | 'listening' | 'blocked' | 'unsupported' | 'error';
 
 const WAKE_WORD = 'baymax';
-const SILENCE_MS = 1200;
+const SILENCE_MS = 700;
 
 export function PatientPortalPage() {
   const { rooms, beds } = useFacilityData();
@@ -32,6 +33,7 @@ export function PatientPortalPage() {
   const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const shouldRunRef = useRef(false);
   const wakeIndexRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
@@ -39,19 +41,40 @@ export function PatientPortalPage() {
   const capturedRef = useRef('');
   const sendToNurseRef = useRef(false);
   const awaitingNurseMessageRef = useRef(false);
+  const dispatchingCaptureRef = useRef(false);
+  const voiceQuotaExceededRef = useRef(false);
 
   const navigate = useNavigate();
   const patient = getPatientSession();
   const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:5050';
 
+  const [voiceId, setVoiceId] = useState('5e3JKXK83vvgQqBcdUol');
+
+  const AVAILABLE_VOICES = [
+    { id: '5e3JKXK83vvgQqBcdUol', name: 'Baymax' },
+    { id: 'fO96OTVqTn6bBvyybd7U', name: 'Kermit' },
+    { id: 'wJ5MX7uuKXZwFqGdWM4N', name: 'Raj' },
+    { id: 'eVItLK1UvXctxuaRV2Oq', name: 'mommy'},
+  ];
+
   useEffect(() => {
     if (!patient?.id) return;
     let active = true;
+    const timeoutId = window.setTimeout(() => {
+      if (!active) return;
+      setRecordError('Medical record is taking longer than expected.');
+      setRecordLoading(false);
+    }, 4000);
     const fetchRecord = async () => {
       setRecordLoading(true);
       setRecordError(null);
       try {
-        const response = await fetch(`${API_BASE}/patients/${patient.id}/records`);
+        const controller = new AbortController();
+        const requestTimeout = window.setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(`${API_BASE}/patients/${patient.id}/records`, {
+          signal: controller.signal
+        });
+        window.clearTimeout(requestTimeout);
         if (!response.ok) {
           setRecordError('Unable to load medical record.');
           return;
@@ -62,11 +85,13 @@ export function PatientPortalPage() {
         if (active) setRecordError('Unable to reach the server.');
       } finally {
         if (active) setRecordLoading(false);
+        window.clearTimeout(timeoutId);
       }
     };
     void fetchRecord();
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
     };
   }, [API_BASE, patient?.id]);
 
@@ -74,7 +99,9 @@ export function PatientPortalPage() {
     let active = true;
     if (!patient?.id) return () => undefined;
     const loadPatient = async () => {
-      const result = await fetchPatientById(patient.id);
+      const cached = await fetchPatientById(patient.id);
+      if (active) setPatientRecord(cached);
+      const result = await fetchPatientById(patient.id, { force: true, timeoutMs: 8000 });
       if (active) setPatientRecord(result);
     };
     void loadPatient();
@@ -84,13 +111,36 @@ export function PatientPortalPage() {
   }, [patient?.id]);
 
   useEffect(() => {
-    const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
-    const unsubscribeUpdate = realtimeBus.on('messageUpdated', () => setMessages([...store.messages]));
+    const unsubscribeNew = realtimeBus.on('newMessage', () => {
+      if (!patient?.id) return;
+      setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
+    });
+    const unsubscribeUpdate = realtimeBus.on('messageUpdated', () => {
+      if (!patient?.id) return;
+      setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
+    });
     return () => {
       unsubscribeNew();
       unsubscribeUpdate();
     };
-  }, []);
+  }, [patient?.id]);
+
+  useEffect(() => {
+    let active = true;
+    if (!patient?.id) return () => undefined;
+    const seed = store.messages.filter((msg) => msg.patientId === patient.id);
+    if (seed.length) {
+      setMessages(seed);
+    }
+    const load = async () => {
+      const result = await fetchMessagesForPatient(patient.id, { force: true, timeoutMs: 8000 });
+      if (active) setMessages(result);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [patient?.id]);
 
   const clearSilenceTimer = () => {
     if (silenceTimerRef.current) {
@@ -105,7 +155,16 @@ export function PatientPortalPage() {
     wakeIndexRef.current = null;
     setCaptured('');
     capturedRef.current = '';
+    setLiveTranscript('');
     clearSilenceTimer();
+  };
+
+  const resumeMicAfterSpeech = () => {
+    shouldRunRef.current = micEnabled;
+    if (!micEnabled) return;
+    try {
+      recognitionRef.current?.start?.();
+    } catch {}
   };
 
   const speak = async (text: string) => {
@@ -114,29 +173,73 @@ export function PatientPortalPage() {
       recognitionRef.current?.stop?.();
     } catch {}
 
+    const safeText = text?.trim() || 'I am here with you.';
+
     try {
-      const response = await fetch(`${API_BASE}/patients/speak`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      if (voiceQuotaExceededRef.current) {
+        throw Object.assign(new Error('Baymax voice quota exceeded'), { code: 'VOICE_QUOTA_EXCEEDED' });
+      }
 
-      if (!response.ok) throw new Error("Voice failed");
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      audio.onended = () => {
-        shouldRunRef.current = micEnabled;
-        if (micEnabled) recognitionRef.current?.start?.();
-        URL.revokeObjectURL(audioUrl);
+      const requestVoiceAudio = async (selectedVoiceId: string) => {
+        const response = await fetch(`${API_BASE}/patients/speak`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: safeText, voiceId: selectedVoiceId })
+        });
+        if (!response.ok) {
+          const raw = await response.text();
+          let parsed: any = null;
+          try {
+            parsed = raw ? JSON.parse(raw) : null;
+          } catch {}
+          const err = Object.assign(
+            new Error(parsed?.message || raw || 'Voice failed'),
+            { code: parsed?.code || `HTTP_${response.status}` }
+          );
+          throw err;
+        }
+        return response.blob();
       };
 
-      await audio.play();
+      let audioBlob: Blob;
+      try {
+        audioBlob = await requestVoiceAudio(voiceId);
+      } catch {
+        audioBlob = await requestVoiceAudio('5e3JKXK83vvgQqBcdUol');
+      }
+      if (!audioBlob.size || !audioBlob.type.includes('audio')) {
+        throw new Error('Invalid audio payload');
+      }
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.volume = 1;
+      audio.preload = 'auto';
+
+      await new Promise<void>((resolve, reject) => {
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          activeAudioRef.current = null;
+          resolve();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(audioUrl);
+          activeAudioRef.current = null;
+          reject(new Error('Audio playback failed'));
+        };
+        void audio.play().catch(reject);
+      });
     } catch (err) {
-      console.error("Speech Error:", err);
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      console.error('Speech Error:', err);
+      const code = (err as any)?.code;
+      if (code === 'VOICE_QUOTA_EXCEEDED') {
+        voiceQuotaExceededRef.current = true;
+        setBaymaxError('Baymax voice credits are exhausted. Baymax will reply in text until credits are refilled.');
+      } else {
+        setBaymaxError('Voice service unavailable. Baymax replied in text only.');
+      }
+    } finally {
+      resumeMicAfterSpeech();
     }
   };
 
@@ -145,7 +248,7 @@ export function PatientPortalPage() {
     if (!trimmed || !patient?.id) return false;
     const sent = await store.sendPatientMessage(patient.id, trimmed);
     if (sent) {
-      setMessages([...store.messages]);
+      setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
       return true;
     }
     return false;
@@ -155,7 +258,7 @@ export function PatientPortalPage() {
     if (!patient?.id) return;
     await store.sendPatientMessage(patient.id, `[Patient → Baymax] ${question}`);
     await store.sendPatientMessage(patient.id, `[Baymax] ${reply}`);
-    setMessages([...store.messages]);
+    setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
   };
 
   const askBaymax = async (question: string) => {
@@ -170,30 +273,25 @@ export function PatientPortalPage() {
       });
       if (!response.ok) {
         setBaymaxError('Unable to reach Baymax right now.');
-        speak('I am having trouble connecting right now. Please try again.');
+        await speak('I am having trouble connecting right now. Please try again.');
         return;
       }
       const data = await response.json();
-      const reply = data.reply ?? '';
+      const reply = (data.reply ?? '').trim() || 'I am here. How can I help you further?';
       setBaymaxReply(reply);
-      speak(reply);
+      await speak(reply);
       await sendExchangeToNurse(question, reply);
-      window.setTimeout(() => {
-        shouldRunRef.current = micEnabled;
-        try {
-          recognitionRef.current?.start?.();
-        } catch {}
-      }, 1200);
     } catch {
       setBaymaxError('Unable to reach Baymax right now.');
-      speak('I am having trouble connecting right now. Please try again.');
+      await speak('I am having trouble connecting right now. Please try again.');
     }
   };
 
-  const scheduleSend = () => {
-    clearSilenceTimer();
-    silenceTimerRef.current = window.setTimeout(async () => {
-      if (modeRef.current !== 'CAPTURING') return;
+  const dispatchCapturedMessage = async () => {
+    if (dispatchingCaptureRef.current) return;
+    if (modeRef.current !== 'CAPTURING') return;
+    dispatchingCaptureRef.current = true;
+    try {
       const payload = capturedRef.current;
       const normalizedPayload = payload.trim();
       const shouldSendToNurse = sendToNurseRef.current || awaitingNurseMessageRef.current;
@@ -201,19 +299,31 @@ export function PatientPortalPage() {
       awaitingNurseMessageRef.current = false;
       resetCapture();
       if (!normalizedPayload) {
-        setError('I heard “baymax”, but did not catch a request. Try again.');
+        setError('I heard baymax, but did not catch a request. Try again.');
         return;
       }
-      speak(`You said: ${normalizedPayload}.`);
       if (shouldSendToNurse) {
         const sent = await sendToDoctor(normalizedPayload);
         if (!sent) {
           setError('Unable to send your message. Try again.');
           return;
         }
+        shouldRunRef.current = micEnabled;
+        try {
+          recognitionRef.current?.start?.();
+        } catch {}
         return;
       }
-      void askBaymax(normalizedPayload);
+      await askBaymax(normalizedPayload);
+    } finally {
+      dispatchingCaptureRef.current = false;
+    }
+  };
+
+  const scheduleSend = () => {
+    clearSilenceTimer();
+    silenceTimerRef.current = window.setTimeout(() => {
+      void dispatchCapturedMessage();
     }, SILENCE_MS);
   };
 
@@ -259,7 +369,6 @@ export function PatientPortalPage() {
         .join(' ')
         .trim();
       if (!combined && !latestChunk) return;
-      setLiveTranscript(combined);
 
       if (modeRef.current === 'WAITING') {
         const loweredCombined = combined.toLowerCase();
@@ -268,6 +377,7 @@ export function PatientPortalPage() {
         if (wakeIndexRef.current !== null && idxCombined <= wakeIndexRef.current) return;
         wakeIndexRef.current = idxCombined;
         const afterWake = combined.slice(idxCombined + WAKE_WORD.length).trim();
+        setLiveTranscript(afterWake);
         const loweredAfter = afterWake.toLowerCase();
         const normalizedAfter = loweredAfter.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
         const nurseCommand =
@@ -303,9 +413,16 @@ export function PatientPortalPage() {
       }
 
       if (modeRef.current === 'CAPTURING') {
+        const latestResult = event.results[event.results.length - 1];
         const message = latestChunk.trim();
+        setLiveTranscript(combined);
         setCaptured(message);
         capturedRef.current = message;
+        if (latestResult?.isFinal) {
+          clearSilenceTimer();
+          void dispatchCapturedMessage();
+          return;
+        }
         scheduleSend();
       }
     };
@@ -419,7 +536,7 @@ export function PatientPortalPage() {
     if (!patient?.id) return [];
     return messages
       .filter((msg) => msg.patientId === patient.id)
-      .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   }, [messages, patient?.id]);
 
   const formatChatBody = (body: string) => {
@@ -610,6 +727,19 @@ export function PatientPortalPage() {
                     </div>
                   </div>
                 </div>
+                
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-ink-400">Assistant Voice</label>
+                  <select 
+                    value={voiceId}
+                    onChange={(e) => setVoiceId(e.target.value)}
+                    className="rounded-lg border border-white/70 bg-white/50 px-2 py-1 text-xs text-ink-700 outline-none focus:border-ink-950"
+                  >
+                    {AVAILABLE_VOICES.map((v) => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="baymax-stage">
                   <div className="baymax-stage__header">
@@ -681,11 +811,6 @@ export function PatientPortalPage() {
                       >
                         Clear
                       </button>
-                      {baymaxReply && (
-                        <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700">
-                          {baymaxReply}
-                        </div>
-                      )}
                       {(baymaxError || error) && (
                         <p className="mt-3 text-xs text-rose-600">{baymaxError || error}</p>
                       )}
@@ -711,7 +836,7 @@ export function PatientPortalPage() {
                     {chatMessages.length === 0 ? (
                       <p className="text-sm text-ink-500">No messages yet.</p>
                     ) : (
-                      chatMessages.slice(-6).map((msg) => (
+                      chatMessages.slice(0, 6).map((msg) => (
                         <div
                           key={msg.id}
                           className={`rounded-2xl border px-4 py-3 text-sm ${
@@ -738,3 +863,4 @@ export function PatientPortalPage() {
     </div>
   );
 }
+

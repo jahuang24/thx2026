@@ -14,6 +14,7 @@ export type MonitorEventType =
   | 'HAND_TO_TEMPLE'
   | 'FORWARD_LEAN'
   | 'POSTURE_DROP'
+  | 'MAJOR_POSTURE_SHIFT'
   | 'PROLONGED_EYE_CLOSURE'
   | 'RESTLESSNESS_SPIKE'
   | 'NO_SUBJECT';

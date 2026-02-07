@@ -8,7 +8,7 @@ import { alerts as seedAlerts, beds, rooms } from '../data/mock';
 import { normalizeBedId, normalizeRoomId } from '../services/patientApi';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
-import { fetchPatients, type PatientRecord } from '../services/patientApi';
+import { fetchPatients, getCachedPatients, type PatientRecord } from '../services/patientApi';
 import { shortestPath, type Coordinate, type GraphMap, type GraphNodeId } from '../decision_support';
 import type { Room, RoomStatus } from '../types';
 
@@ -51,7 +51,11 @@ export function DoctorDashboard() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const result = await fetchPatients();
+      const cached = getCachedPatients();
+      if (cached?.length) {
+        setPatients(cached);
+      }
+      const result = await fetchPatients({ force: true });
       if (active) setPatients(result);
     };
     void load();

@@ -16,7 +16,15 @@ interface SubjectRuntime {
   handledImmediateEvents: Set<string>;
 }
 
-type PatternKind = 'NONE' | 'NAUSEA_LIKE' | 'DROWSY_LIKE' | 'RESTLESS_LIKE' | 'UNCERTAIN' | 'POSTURE_DROP';
+type PatternKind =
+  | 'NONE'
+  | 'NAUSEA_LIKE'
+  | 'DROWSY_LIKE'
+  | 'RESTLESS_LIKE'
+  | 'ACTIVITY'
+  | 'MAJOR_POSTURE_SHIFT'
+  | 'UNCERTAIN'
+  | 'POSTURE_DROP';
 
 export interface AgentEvaluationInput {
   ts: number;
@@ -59,7 +67,7 @@ function createObservedSignals(input: AgentEvaluationInput): string[] {
   if (latestMetrics.forwardLeanSecondsPerMin >= 8) {
     signals.push(`forward-lean sustained (${roundMetric(latestMetrics.forwardLeanSecondsPerMin)}s/min)`);
   }
-  if (latestMetrics.postureChangeRate >= 4) {
+  if (latestMetrics.postureChangeRate >= 2) {
     signals.push(`frequent posture shifts (${roundMetric(latestMetrics.postureChangeRate)}/min)`);
   }
   if (latestMetrics.perclos >= 0.2) {
@@ -69,6 +77,10 @@ function createObservedSignals(input: AgentEvaluationInput): string[] {
     signals.push('restlessness elevated');
   }
   const recentNoSubject = input.events60s.some((event) => event.type === 'NO_SUBJECT');
+  const majorPostureShiftSeen = input.events60s.some((event) => event.type === 'MAJOR_POSTURE_SHIFT');
+  if (majorPostureShiftSeen) {
+    signals.push('abrupt major posture shift observed');
+  }
   if (recentNoSubject && signals.length === 0) {
     signals.push('subject intermittently not detected');
   }
@@ -105,15 +117,22 @@ export class RelayAgent {
     const metrics = input.subject.latestMetrics;
     const handToMouthEvents = input.events60s.filter((event) => event.type === 'HAND_TO_MOUTH').length;
     const hasPostureDropNewEvent = input.newEvents.some((event) => event.type === 'POSTURE_DROP');
+    const hasMajorPostureShiftNewEvent = input.newEvents.some((event) => event.type === 'MAJOR_POSTURE_SHIFT');
     const discomfortSignals =
-      metrics.handToMouthPerMin >= 1.5 || metrics.forwardLeanSecondsPerMin >= 12 || metrics.postureChangeRate >= 5;
+      metrics.handToMouthPerMin >= 1.5 || metrics.forwardLeanSecondsPerMin >= 12 || metrics.postureChangeRate >= 3;
     const drowsySignals =
       metrics.perclos >= thresholds.drowsyPerclos &&
       metrics.movementLevel <= thresholds.lowMovement &&
       metrics.handToMouthPerMin < 1 &&
       metrics.forwardLeanSecondsPerMin < 12;
+    const postureSensitiveMovementFloor = Math.max(0.4, thresholds.highMovement - 0.2);
     const restlessSignals =
-      metrics.postureChangeRate >= thresholds.highPostureChange && metrics.movementLevel >= thresholds.highMovement;
+      metrics.postureChangeRate >= thresholds.highPostureChange &&
+      metrics.movementLevel >= postureSensitiveMovementFloor;
+    const activitySignals =
+      metrics.postureChangeRate >= 2 ||
+      metrics.movementLevel >= 0.35 ||
+      metrics.forwardLeanSecondsPerMin >= 8;
     const nauseaLike =
       (metrics.handToMouthPerMin >= thresholds.nauseaHandToMouthPerMin ||
         handToMouthEvents >= thresholds.nauseaHandEventsPerMinute) &&
@@ -139,6 +158,13 @@ export class RelayAgent {
       title = 'Check-in suggested';
       recommendation = 'Urgent staff check-in suggested.';
       confidence = clamp01(0.68 + Math.max(0, 0.24 - metrics.movementLevel * 0.55));
+    } else if (hasMajorPostureShiftNewEvent) {
+      pattern = 'MAJOR_POSTURE_SHIFT';
+      criteriaMet = ['major posture-shift event detected'];
+      severity = 'MED';
+      title = 'Check-in suggested';
+      recommendation = 'Abrupt posture change detected; prompt check-in suggested.';
+      confidence = clamp01(0.56 + Math.min(metrics.movementLevel, 0.34));
     } else if (nauseaLike) {
       pattern = 'NAUSEA_LIKE';
       criteriaMet = [
@@ -187,26 +213,45 @@ export class RelayAgent {
       recommendation = 'Continue monitoring and consider a comfort check if pattern persists.';
       interpretiveTag = INTERPRETIVE_TAGS.restless;
       confidence = clamp01(0.4 + Math.min(metrics.postureChangeRate / 12, 0.3) + metrics.movementLevel * 0.2);
+    } else if (activitySignals) {
+      pattern = 'ACTIVITY';
+      criteriaMet = [
+        `posture changes ${roundMetric(metrics.postureChangeRate)}/min`,
+        `movement ${roundMetric(metrics.movementLevel)}`
+      ];
+      severity = 'LOW';
+      title = 'Monitor';
+      recommendation = 'Observed activity increased; continue watching short-term trend.';
+      confidence = clamp01(0.28 + Math.min(metrics.postureChangeRate / 12, 0.25) + metrics.movementLevel * 0.2);
     }
 
-    const shouldEmitImmediately = pattern === 'POSTURE_DROP';
+    const shouldEmitImmediately = pattern === 'POSTURE_DROP' || pattern === 'MAJOR_POSTURE_SHIFT';
     const hasActionablePattern = pattern !== 'NONE';
     const inCooldown = input.ts < runtime.cooldownUntil;
     const canEscalateInCooldown =
       inCooldown && runtime.lastSeverity ? severityRank[severity] > severityRank[runtime.lastSeverity] : false;
     let emitMessage = false;
+    let requiredPersistenceMs = thresholds.persistenceMs;
+
+    if (pattern === 'RESTLESS_LIKE') {
+      requiredPersistenceMs = Math.max(6000, Math.round(thresholds.persistenceMs * 0.6));
+    } else if (pattern === 'ACTIVITY') {
+      requiredPersistenceMs = 2500;
+    }
 
     if (shouldEmitImmediately) {
-      const postureDropEvent = input.newEvents.find((event) => event.type === 'POSTURE_DROP');
-      if (postureDropEvent && !runtime.handledImmediateEvents.has(postureDropEvent.id)) {
-        runtime.handledImmediateEvents.add(postureDropEvent.id);
+      const immediateEvent = input.newEvents.find(
+        (event) => event.type === 'POSTURE_DROP' || event.type === 'MAJOR_POSTURE_SHIFT'
+      );
+      if (immediateEvent && !runtime.handledImmediateEvents.has(immediateEvent.id)) {
+        runtime.handledImmediateEvents.add(immediateEvent.id);
         emitMessage = true;
       }
     } else if (hasActionablePattern) {
       if (runtime.activeSince === null) {
         runtime.activeSince = input.ts;
       }
-      const persistedLongEnough = input.ts - runtime.activeSince >= thresholds.persistenceMs;
+      const persistedLongEnough = input.ts - runtime.activeSince >= requiredPersistenceMs;
       if (persistedLongEnough && (!inCooldown || canEscalateInCooldown)) {
         emitMessage = true;
       }
@@ -225,7 +270,12 @@ export class RelayAgent {
       runtime.lastSeverity = severity;
       runtime.activeSince = null;
 
-      const observed = pattern === 'POSTURE_DROP' ? 'Observed: sudden posture drop + prolonged stillness.' : toObservedLine(observedSignals);
+      const observed =
+        pattern === 'POSTURE_DROP'
+          ? 'Observed: sudden posture drop + prolonged stillness.'
+          : pattern === 'MAJOR_POSTURE_SHIFT'
+            ? 'Observed: abrupt major posture shift detected in a short interval.'
+            : toObservedLine(observedSignals);
       const message: AgentMessage = {
         id: createMessageId(input.subject.id),
         ts: input.ts,
@@ -234,7 +284,8 @@ export class RelayAgent {
         severity,
         confidence: clamp01(confidence),
         observed,
-        interpretiveTag: pattern === 'POSTURE_DROP' ? undefined : interpretiveTag,
+        interpretiveTag:
+          pattern === 'POSTURE_DROP' || pattern === 'MAJOR_POSTURE_SHIFT' ? undefined : interpretiveTag,
         evidence: {
           metrics,
           criteriaMet,

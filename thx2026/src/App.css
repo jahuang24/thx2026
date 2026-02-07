@@ -370,6 +370,32 @@
   border-radius: 999px;
 }
 
+.chat-bubble {
+  border-radius: 18px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.chat-bubble--nurse {
+  color: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.6);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.96));
+}
+
+.chat-bubble--patient {
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.3);
+  background: linear-gradient(180deg, rgba(248, 249, 252, 0.98), rgba(234, 238, 244, 0.92));
+}
+
+.chat-bubble__meta--nurse {
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.chat-bubble__meta--patient {
+  color: rgba(71, 85, 105, 0.7);
+}
+
 .creative-grid {
   position: relative;
   z-index: 1;
@@ -522,6 +548,11 @@
   background: radial-gradient(circle at 30% 20%, rgba(59, 130, 246, 0.18), transparent 40%), #f1f5f9;
 }
 
+.monitor-video-frame {
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+}
+
 .preview-frame video,
 .preview-overlay {
   width: 100%;
@@ -566,44 +597,6 @@
   margin: 0.75rem 0 0;
   color: #991b1b;
   font-size: 0.88rem;
-}
-
-.toggle-input {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
-  color: #475569;
-}
-
-.dev-injector {
-  margin-top: 0.85rem;
-  border-top: 1px dashed #cbd5e1;
-  padding-top: 0.75rem;
-}
-
-.dev-injector h4 {
-  margin: 0 0 0.6rem;
-  font-size: 0.78rem;
-  color: #334155;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.dev-injector__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.dev-injector__buttons button {
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #1e293b;
-  font-size: 0.78rem;
-  padding: 0.38rem 0.58rem;
-  cursor: pointer;
 }
 
 .tracker-subjects__list {
@@ -709,6 +702,41 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #475569;
+}
+
+.subject-card__vitals {
+  margin-top: 0.45rem;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.subject-card__vitals div {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.35rem 0.4rem;
+  background: #ffffff;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.subject-card__vitals span {
+  font-size: 0.7rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.subject-card__vitals strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.subject-card__vitals strong em {
+  margin-left: 0.2rem;
+  font-style: normal;
+  font-size: 0.7rem;
+  color: #94a3b8;
 }
 
 .subject-card__signals ul {
@@ -1088,12 +1116,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #64748b;
-}
-
-.subject-card__focus {
-  margin: 0.34rem 0 0;
-  font-size: 0.74rem;
-  color: #475569;
 }
 
 .subject-card__signals ul {
