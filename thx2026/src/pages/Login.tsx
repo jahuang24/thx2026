@@ -32,7 +32,7 @@ export function Login() {
           Doctor Login
         </button>
         <button
-          onClick={() => navigate('/patient-portal')}
+          onClick={() => navigate('/patient-login')}
           className="w-full rounded-full border border-ink-200 bg-white px-4 py-3 text-sm font-semibold text-ink-900 transition hover:bg-ink-50"
         >
           Patient Portal

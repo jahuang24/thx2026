@@ -10,6 +10,7 @@ import { DoctorLogin } from './pages/DoctorLogin';
 import { Login } from './pages/Login';
 import { MessagesPage } from './pages/Messages';
 import { NotFoundPage } from './pages/NotFound';
+import { PatientLogin } from './pages/PatientLogin';
 import { PatientDetailPage } from './pages/PatientDetail';
 import { PatientMonitorPage } from './pages/PatientMonitor';
 import { PatientPortalPage } from './pages/PatientPortal';
@@ -34,6 +35,7 @@ function App() {
     <Routes>
       <Route path="/" element={<Login />} />
       <Route path="/doctor-login" element={<DoctorLogin />} />
+      <Route path="/patient-login" element={<PatientLogin />} />
       <Route
         path="/doctor-dashboard"
         element={

@@ -1,8 +1,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { patients } from '../data/mock';
+import { useNavigate } from 'react-router-dom';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
+import { clearPatientSession, getPatientSession } from '../services/patientSession';
 
 type SpeechRecognition = any;
 
@@ -15,11 +16,17 @@ const SILENCE_MS = 1200;
 
 export function PatientPortalPage() {
 
-  const [, setMicState] = useState<MicState>('idle');
+  const [micState, setMicState] = useState<MicState>('idle');
   const [mode, setMode] = useState<Mode>('WAITING');
   const [captured, setCaptured] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState(store.messages);
+  const [medicalRecord, setMedicalRecord] = useState<any | null>(null);
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [baymaxReply, setBaymaxReply] = useState<string | null>(null);
+  const [baymaxError, setBaymaxError] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState('');
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const shouldRunRef = useRef(true);
@@ -27,8 +34,38 @@ export function PatientPortalPage() {
   const silenceTimerRef = useRef<number | null>(null);
   const modeRef = useRef<Mode>('WAITING');
   const capturedRef = useRef('');
+  const sendToNurseRef = useRef(false);
+  const awaitingNurseMessageRef = useRef(false);
 
-  const patient = patients[0];
+  const navigate = useNavigate();
+  const patient = getPatientSession();
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:5050';
+
+  useEffect(() => {
+    if (!patient?.id) return;
+    let active = true;
+    const fetchRecord = async () => {
+      setRecordLoading(true);
+      setRecordError(null);
+      try {
+        const response = await fetch(`${API_BASE}/patients/${patient.id}/records`);
+        if (!response.ok) {
+          setRecordError('Unable to load medical record.');
+          return;
+        }
+        const data = await response.json();
+        if (active) setMedicalRecord(data);
+      } catch {
+        if (active) setRecordError('Unable to reach the server.');
+      } finally {
+        if (active) setRecordLoading(false);
+      }
+    };
+    void fetchRecord();
+    return () => {
+      active = false;
+    };
+  }, [API_BASE, patient?.id]);
 
   useEffect(() => {
     const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
@@ -55,6 +92,29 @@ export function PatientPortalPage() {
     clearSilenceTimer();
   };
 
+  const speak = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    shouldRunRef.current = false;
+    try {
+      recognitionRef.current?.stop?.();
+    } catch {}
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.lang = 'en-US';
+    utterance.onend = () => {
+      shouldRunRef.current = true;
+      try {
+        recognitionRef.current?.start?.();
+        setMicState('listening');
+      } catch {
+        setMicState('idle');
+      }
+    };
+    window.speechSynthesis.speak(utterance);
+  };
+
   const sendToDoctor = async (message: string) => {
     const trimmed = message.trim();
     if (!trimmed || !patient?.id) return false;
@@ -66,15 +126,68 @@ export function PatientPortalPage() {
     return false;
   };
 
+  const sendExchangeToNurse = async (question: string, reply: string) => {
+    if (!patient?.id) return;
+    await store.sendPatientMessage(patient.id, `[Patient → Baymax] ${question}`);
+    await store.sendPatientMessage(patient.id, `[Baymax] ${reply}`);
+    setMessages([...store.messages]);
+  };
+
+  const askBaymax = async (question: string) => {
+    if (!patient?.id) return;
+    setBaymaxError(null);
+    setBaymaxReply(null);
+    try {
+      const response = await fetch(`${API_BASE}/patients/${patient.id}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: question })
+      });
+      if (!response.ok) {
+        setBaymaxError('Unable to reach Baymax right now.');
+        speak('I am having trouble connecting right now. Please try again.');
+        return;
+      }
+      const data = await response.json();
+      const reply = data.reply ?? '';
+      setBaymaxReply(reply);
+      speak(reply);
+      await sendExchangeToNurse(question, reply);
+      window.setTimeout(() => {
+        shouldRunRef.current = true;
+        try {
+          recognitionRef.current?.start?.();
+        } catch {}
+      }, 1200);
+    } catch {
+      setBaymaxError('Unable to reach Baymax right now.');
+      speak('I am having trouble connecting right now. Please try again.');
+    }
+  };
+
   const scheduleSend = () => {
     clearSilenceTimer();
     silenceTimerRef.current = window.setTimeout(async () => {
       if (modeRef.current !== 'CAPTURING') return;
-      const sent = await sendToDoctor(capturedRef.current);
+      const payload = capturedRef.current;
+      const shouldSendToNurse = sendToNurseRef.current || awaitingNurseMessageRef.current;
+      sendToNurseRef.current = false;
+      awaitingNurseMessageRef.current = false;
       resetCapture();
-      if (!sent) {
-        setError('I heard “baymax”, but no message followed. Try again.');
+      if (!payload.trim()) {
+        setError('I heard “baymax”, but did not catch a request. Try again.');
+        return;
       }
+      if (shouldSendToNurse) {
+        const sent = await sendToDoctor(payload);
+        if (!sent) {
+          setError('Unable to send your message. Try again.');
+          return;
+        }
+        speak('Got it.');
+        return;
+      }
+      void askBaymax(payload);
     }, SILENCE_MS);
   };
 
@@ -108,12 +221,36 @@ export function PatientPortalPage() {
         .join(' ')
         .trim();
       if (!combined && !latestChunk) return;
+      setLiveTranscript(combined);
 
       if (modeRef.current === 'WAITING') {
         const loweredLatest = latestChunk.toLowerCase();
         const idxLatest = loweredLatest.lastIndexOf(WAKE_WORD);
         if (idxLatest < 0) return;
         const afterWake = latestChunk.slice(idxLatest + WAKE_WORD.length).trim();
+        const loweredAfter = afterWake.toLowerCase();
+        const normalizedAfter = loweredAfter.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const nurseCommand =
+          normalizedAfter.includes('send a message to the nurse') ||
+          normalizedAfter.includes('send a message to my nurse') ||
+          normalizedAfter.includes('send a message to nurse') ||
+          normalizedAfter.includes('message the nurse') ||
+          normalizedAfter.includes('message my nurse') ||
+          normalizedAfter.includes('tell the nurse') ||
+          normalizedAfter.includes('tell my nurse') ||
+          /send.*(message|note).*(nurse)/i.test(normalizedAfter) ||
+          /(message|tell|send).*nurse/i.test(normalizedAfter);
+        if (nurseCommand) {
+          sendToNurseRef.current = true;
+          awaitingNurseMessageRef.current = true;
+          setCaptured('');
+          capturedRef.current = '';
+          wakeIndexRef.current = 0;
+          setMode('CAPTURING');
+          modeRef.current = 'CAPTURING';
+          speak('What do you want to send?');
+          return;
+        }
         setCaptured('');
         capturedRef.current = '';
         wakeIndexRef.current = 0;
@@ -146,19 +283,41 @@ export function PatientPortalPage() {
       setError('Microphone error. Try again.');
     };
 
+    recognition.onstart = () => {
+      setMicState('listening');
+    };
+
     recognition.onend = () => {
+      setMicState('idle');
       if (!shouldRunRef.current) return;
       try {
         recognition.start();
-        setMicState('listening');
       } catch {
-        setMicState('idle');
+        return;
       }
     };
 
     recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      setMicState('idle');
+    }
+
+    const handleGestureStart = () => {
+      if (!recognitionRef.current) return;
+      shouldRunRef.current = true;
+      try {
+        recognitionRef.current.start();
+        setMicState('listening');
+      } catch {}
+    };
+    window.addEventListener('click', handleGestureStart, { once: true });
+    window.addEventListener('touchstart', handleGestureStart, { once: true });
 
     return () => {
+      window.removeEventListener('click', handleGestureStart);
+      window.removeEventListener('touchstart', handleGestureStart);
       shouldRunRef.current = false;
       clearSilenceTimer();
       try {
@@ -168,6 +327,20 @@ export function PatientPortalPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const watchdog = window.setInterval(() => {
+      if (!shouldRunRef.current) return;
+      if (!recognitionRef.current) return;
+      if (micState === 'listening') return;
+      try {
+        recognitionRef.current.start();
+      } catch {
+        return;
+      }
+    }, 4000);
+    return () => window.clearInterval(watchdog);
+  }, [micState]);
+
   const handleEnableMic = async () => {
     setError(null);
     try {
@@ -175,6 +348,7 @@ export function PatientPortalPage() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((track) => track.stop());
       }
+      shouldRunRef.current = true;
       try {
         recognitionRef.current?.start?.();
         setMicState('listening');
@@ -197,6 +371,7 @@ export function PatientPortalPage() {
   };
 
   const handleDisableMic = () => {
+    shouldRunRef.current = false;
     try {
       recognitionRef.current?.stop?.();
     } catch {}
@@ -234,6 +409,28 @@ export function PatientPortalPage() {
   ];
   const currentStepIndex = 3;
 
+  if (!patient) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f3f7ff,_#ffffff_55%,_#f7fafc)] px-6 py-12 text-slate-900">
+        <div className="mx-auto max-w-xl rounded-[32px] border border-slate-200 bg-white/90 p-8 shadow-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+            Patient Portal
+          </p>
+          <h1 className="mt-4 text-3xl font-semibold text-slate-900">Please sign in</h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Sign in to view your messages and medical record.
+          </p>
+          <button
+            onClick={() => navigate('/patient-login')}
+            className="mt-6 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+          >
+            Go to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f3f7ff,_#ffffff_55%,_#f7fafc)] px-6 py-10 text-slate-900">
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
@@ -251,7 +448,7 @@ export function PatientPortalPage() {
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-              {patient?.name ?? 'Patient'} · {patient?.mrn ?? 'MRN'}
+              {patient.name} · {patient.mrn}
             </div>
           </div>
 
@@ -276,7 +473,7 @@ export function PatientPortalPage() {
               </div>
               <p className="mt-3 text-base text-slate-700">
                 {mode === 'WAITING'
-                  ? 'Say “baymax” to start your message.'
+                  ? 'Say “baymax” to ask a question. Say “baymax, send a message to the nurse” to send a message.'
                   : 'Pause when finished and we will send it.'}
               </p>
               {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
@@ -326,6 +523,22 @@ export function PatientPortalPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-sm font-semibold text-slate-900">Baymax Assistant</p>
+              <p className="mt-2 text-sm text-slate-600">
+                Baymax will answer your questions out loud and log the exchange for your nurse.
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Heard: {liveTranscript ? `“${liveTranscript}”` : 'Listening…'}
+              </p>
+              {baymaxReply && (
+                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+                  {baymaxReply}
+                </div>
+              )}
+              {baymaxError && <p className="mt-3 text-xs text-rose-600">{baymaxError}</p>}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-sm font-semibold text-slate-900">Your Sent Messages</p>
               <div className="mt-3 space-y-3">
                 {outgoing.length === 0 ? (
@@ -341,6 +554,75 @@ export function PatientPortalPage() {
                   ))
                 )}
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-900">Your Medical Record</p>
+                <button
+                  onClick={() => {
+                    clearPatientSession();
+                    navigate('/patient-login');
+                  }}
+                  className="text-xs font-semibold text-slate-500"
+                >
+                  Sign out
+                </button>
+              </div>
+              {recordLoading ? (
+                <p className="mt-3 text-sm text-slate-500">Loading record…</p>
+              ) : recordError ? (
+                <p className="mt-3 text-sm text-rose-600">{recordError}</p>
+              ) : medicalRecord ? (
+                <div className="mt-3 space-y-3 text-sm text-slate-700">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Allergies</p>
+                    <p className="mt-1">
+                      {medicalRecord.allergies?.length ? medicalRecord.allergies.join(', ') : 'None listed'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Conditions</p>
+                    <p className="mt-1">
+                      {medicalRecord.conditions?.length ? medicalRecord.conditions.join(', ') : 'None listed'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Medications</p>
+                    <p className="mt-1">
+                      {medicalRecord.medications?.length ? medicalRecord.medications.join(', ') : 'None listed'}
+                    </p>
+                  </div>
+                  {medicalRecord.notes ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Notes</p>
+                      <p className="mt-1">{medicalRecord.notes}</p>
+                    </div>
+                  ) : null}
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Documents</p>
+                    {medicalRecord.documents?.length ? (
+                      <ul className="mt-2 space-y-2">
+                        {medicalRecord.documents.map((doc: any, index: number) => (
+                          <li key={`${doc.name ?? 'document'}-${index}`}>
+                            <a
+                              className="text-sm font-semibold text-slate-700 underline"
+                              href={`data:${doc.type ?? 'application/pdf'};base64,${doc.data}`}
+                              download={doc.name ?? `document-${index + 1}.pdf`}
+                            >
+                              {doc.name ?? `Document ${index + 1}`}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-sm text-slate-500">No documents uploaded.</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">No record found.</p>
+              )}
             </div>
           </div>
         </section>
@@ -385,9 +667,7 @@ export function PatientPortalPage() {
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold text-slate-900">Where You Are</h2>
               </div>
-              <span className="text-xs text-slate-400">
-                Room {patient?.bedId?.replace('bed-', '') ?? 'TBD'}
-              </span>
+              <span className="text-xs text-slate-400">Room TBD</span>
             </div>
             <div className="mt-4 space-y-3">
               {journey.map((step, index) => {

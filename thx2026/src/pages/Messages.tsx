@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { patients } from '../data/mock';
+import { fetchPatients, type PatientRecord } from '../services/patientApi';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 
@@ -8,7 +8,8 @@ const formatTime = (value: string) =>
 
 export function MessagesPage() {
   const [messages, setMessages] = useState(store.messages);
-  const [activePatientId, setActivePatientId] = useState<string>(() => patients[0]?.id ?? '');
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [activePatientId, setActivePatientId] = useState<string>('');
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
@@ -19,6 +20,22 @@ export function MessagesPage() {
       unsubscribeUpdate();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPatients = async () => {
+      const result = await fetchPatients();
+      if (!active) return;
+      setPatients(result);
+      if (!activePatientId && result.length) {
+        setActivePatientId(result[0].id);
+      }
+    };
+    void loadPatients();
+    return () => {
+      active = false;
+    };
+  }, [activePatientId]);
 
   useEffect(() => {
     if (activePatientId) {
@@ -50,7 +67,7 @@ export function MessagesPage() {
       ).length;
       return { patient, lastMessage, unread };
     });
-  }, [messages]);
+  }, [messages, patients]);
 
   const handleSend = async () => {
     if (!activePatientId || !draft.trim()) return;
