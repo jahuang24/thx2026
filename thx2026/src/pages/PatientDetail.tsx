@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { alerts, beds, tasks } from '../data/mock';
 import { fetchPatientById, type PatientRecord } from '../services/patientApi';
 
 export function PatientDetailPage() {
   const { patientId } = useParams();
+  const navigate = useNavigate();
   const [patient, setPatient] = useState<PatientRecord | null>(null);
+
+  useEffect(() => {
+    if (!patientId) return;
+    navigate(`/monitor/${patientId}`, { replace: true });
+  }, [navigate, patientId]);
 
   useEffect(() => {
     let active = true;

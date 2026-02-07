@@ -21,7 +21,7 @@ export function PatientsIndexPage() {
     <div className="space-y-6">
       <header className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-panel">
         <h2 className="text-2xl font-display font-semibold text-ink-900">Patients</h2>
-        <p className="text-sm text-ink-500">Role-limited PHI. Open patient detail for full view.</p>
+        <p className="text-sm text-ink-500">Role-limited PHI. Open the monitor for full view.</p>
       </header>
       <div className="space-y-3">
         {patients.map((patient) => (
@@ -33,9 +33,9 @@ export function PatientsIndexPage() {
               </div>
               <Link
                 className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700"
-                to={`/patients/${patient.id}`}
+                to={`/monitor/${patient.id}`}
               >
-                View
+                Open Monitor
               </Link>
             </div>
           </div>

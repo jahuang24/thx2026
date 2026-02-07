@@ -121,10 +121,10 @@ export function RoomDetailPage() {
                     </div>
                     {occupant ? (
                       <Link
-                        to={`/patients/${occupant.id}`}
+                        to={`/monitor/${occupant.id}`}
                         className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700"
                       >
-                        View patient
+                        Open monitor
                       </Link>
                     ) : (
                       <button className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700">

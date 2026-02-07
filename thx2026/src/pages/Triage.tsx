@@ -232,12 +232,6 @@ export function TriagePage() {
           >
             Open Monitor
           </Link>
-          <Link
-            to={`/patients/${entry.patientId}`}
-            className="rounded-full border border-ink-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-700"
-          >
-            Patient Details
-          </Link>
         </div>
       </article>
     );
