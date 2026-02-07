@@ -95,9 +95,13 @@ async function chatResponse(system, user) {
 
 router.post("/speak", async (req, res) => {
   try {
-    const { text } = req.body;
-
-    const audioStream = await elevenlabs.textToSpeech.convert("wJ5MX7uuKXZwFqGdWM4N", {
+    // Extract voiceId from body
+    const { text, voiceId } = req.body; 
+    console.log("connected to baymax");
+    // Fallback to a default if the frontend doesn't send one
+    const targetVoice = voiceId || process.env.ELEVENLABS_VOICE_ID || "wJ5MX7uuKXZwFqGdWM4N";
+    console.log(targetVoice);
+    const audioStream = await elevenlabs.textToSpeech.convert(targetVoice, {
       text: text,
       model_id: "eleven_multilingual_v2",
       output_format: "mp3_44100_128",
