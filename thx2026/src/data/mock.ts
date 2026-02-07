@@ -14,8 +14,8 @@ import type {
 
 export const currentUser: User = {
   id: 'user-1',
-  name: 'Jordan Lee',
-  role: 'Nurse'
+  name: 'Scotty the Dog',
+  role: 'Doctor'
 };
 
 export const units: Unit[] = [
