@@ -86,10 +86,18 @@ export function PatientLogin() {
   return (
     <div className="min-h-screen px-6 py-12 text-slate-900">
       <div className="mx-auto w-full max-w-4xl gap-6 rounded-[32px] border border-white/80 bg-white/80 p-8 shadow-panel md:grid-cols-[1.1fr_1fr]">
+        
         <div className="space-y-4">
-
-          <p className="text-3xl font-semibold uppercase tracking-[0.25em] text-black pb-4 text-center">Patient Portal</p>
-
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => navigate('/')}
+              className="rounded-full bg-slate-200 px-6 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-300"
+            >
+              ←
+            </button>
+            <p className="text-3xl font-semibold uppercase tracking-[0.25em] text-black">Patient Portal</p>
+            <div className="w-20"></div>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
