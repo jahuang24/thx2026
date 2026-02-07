@@ -108,27 +108,38 @@ export function PatientPortalPage() {
     clearSilenceTimer();
   };
 
-  const speak = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
+  const speak = async (text: string) => {
     shouldRunRef.current = false;
     try {
       recognitionRef.current?.stop?.();
     } catch {}
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.lang = 'en-US';
-    utterance.onend = () => {
-      shouldRunRef.current = micEnabled;
-      try {
-        recognitionRef.current?.start?.();
-        setMicState(micEnabled ? 'listening' : 'idle');
-      } catch {
-        setMicState('idle');
-      }
-    };
-    window.speechSynthesis.speak(utterance);
+
+    try {
+      // Note: Calling YOUR server (port 5050) instead of ElevenLabs
+      const response = await fetch(`${API_BASE}/patients/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) throw new Error("Voice failed");
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      audio.onended = () => {
+        shouldRunRef.current = micEnabled;
+        if (micEnabled) recognitionRef.current?.start?.();
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.error("Speech Error:", err);
+      // Fallback to browser voice if the high-quality one fails
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    }
   };
 
   const sendToDoctor = async (message: string) => {
