@@ -191,6 +191,13 @@ export function PatientPortalPage() {
     }
   };
 
+  const handleDisableMic = () => {
+    try {
+      recognitionRef.current?.stop?.();
+    } catch {}
+    setMicState('idle');
+  };
+
   const handleReset = () => {
     resetCapture();
     setError(null);
@@ -273,6 +280,12 @@ export function PatientPortalPage() {
                 className="mt-4 rounded-full bg-slate-900 px-5 py-2 text-xs font-semibold text-white"
               >
                 Enable microphone
+              </button>
+              <button
+                onClick={handleDisableMic}
+                className="mt-4 rounded-full border border-slate-200 bg-white px-5 py-2 text-xs font-semibold text-slate-700"
+              >
+                Disable microphone
               </button>
             </div>
 
