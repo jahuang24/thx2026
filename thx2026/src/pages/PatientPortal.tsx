@@ -45,11 +45,13 @@ export function PatientPortalPage() {
   const patient = getPatientSession();
   const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:5050';
 
-  const [voiceId, setVoiceId] = useState('wJ5MX7uuKXZwFqGdWM4N');
+  const [voiceId, setVoiceId] = useState('5e3JKXK83vvgQqBcdUol');
 
   const AVAILABLE_VOICES = [
-    { id: 'wJ5MX7uuKXZwFqGdWM4N', name: 'Raj' },
+    { id: '5e3JKXK83vvgQqBcdUol', name: 'Baymax' },
     { id: 'fO96OTVqTn6bBvyybd7U', name: 'Kermit' },
+    { id: 'wJ5MX7uuKXZwFqGdWM4N', name: 'Raj' },
+    { id: 'eVItLK1UvXctxuaRV2Oq', name: 'mommy'},
   ];
 
   useEffect(() => {
