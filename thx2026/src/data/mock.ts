@@ -73,6 +73,96 @@ export const rooms: Room[] = [
     lastCleanedAt: '2026-02-06T02:05:00Z',
     maintenanceFlags: [],
     readinessReasons: []
+  },
+  {
+    id: 'room-406',
+    unitId: 'unit-b',
+    roomNumber: '406',
+    type: 'MED_SURG',
+    status: 'READY',
+    lastCleanedAt: '2026-02-06T04:05:00Z',
+    maintenanceFlags: [],
+    readinessReasons: []
+  },
+  {
+    id: 'room-407',
+    unitId: 'unit-b',
+    roomNumber: '407',
+    type: 'OBS',
+    status: 'NOT_READY',
+    lastCleanedAt: '2026-02-05T23:05:00Z',
+    maintenanceFlags: ['IV pump calibration'],
+    readinessReasons: ['Equipment check pending']
+  },
+  {
+    id: 'room-408',
+    unitId: 'unit-a',
+    roomNumber: '408',
+    type: 'ICU',
+    status: 'CLEANING',
+    lastCleanedAt: '2026-02-06T02:55:00Z',
+    maintenanceFlags: [],
+    readinessReasons: ['EVS turnover in progress']
+  },
+  {
+    id: 'room-409',
+    unitId: 'unit-a',
+    roomNumber: '409',
+    type: 'MED_SURG',
+    status: 'READY',
+    lastCleanedAt: '2026-02-06T03:25:00Z',
+    maintenanceFlags: [],
+    readinessReasons: []
+  },
+  {
+    id: 'room-410',
+    unitId: 'unit-b',
+    roomNumber: '410',
+    type: 'OBS',
+    status: 'READY',
+    lastCleanedAt: '2026-02-06T04:15:00Z',
+    maintenanceFlags: [],
+    readinessReasons: []
+  },
+  {
+    id: 'room-411',
+    unitId: 'unit-b',
+    roomNumber: '411',
+    type: 'ISOLATION',
+    status: 'NOT_READY',
+    lastCleanedAt: '2026-02-05T22:10:00Z',
+    maintenanceFlags: ['Air filter replacement'],
+    readinessReasons: ['Isolation prep in progress']
+  },
+  {
+    id: 'room-412',
+    unitId: 'unit-a',
+    roomNumber: '412',
+    type: 'MED_SURG',
+    status: 'READY',
+    lastCleanedAt: '2026-02-06T01:15:00Z',
+    maintenanceFlags: [],
+    readinessReasons: []
+  },
+  {
+    id: 'room-413',
+    unitId: 'unit-b',
+    roomNumber: '413',
+    type: 'OBS',
+    status: 'CLEANING',
+    lastCleanedAt: '2026-02-06T00:45:00Z',
+    maintenanceFlags: [],
+    readinessReasons: ['EVS turnover in progress']
+  },
+  {
+    id: 'room-414',
+    unitId: 'unit-b',
+    roomNumber: '414',
+    type: 'MED_SURG',
+    status: 'READY',
+    lastCleanedAt: '2026-02-06T02:35:00Z',
+    maintenanceFlags: [],
+    readinessReasons: []
   }
 ];
 
@@ -82,7 +172,19 @@ export const beds: Bed[] = [
   { id: 'bed-402a', roomId: 'room-402', bedLabel: 'A', occupied: false, patientId: null },
   { id: 'bed-403a', roomId: 'room-403', bedLabel: 'A', occupied: false, patientId: null },
   { id: 'bed-404a', roomId: 'room-404', bedLabel: 'A', occupied: false, patientId: null },
-  { id: 'bed-405a', roomId: 'room-405', bedLabel: 'A', occupied: true, patientId: 'patient-2' }
+  { id: 'bed-405a', roomId: 'room-405', bedLabel: 'A', occupied: true, patientId: 'patient-2' },
+  { id: 'bed-406a', roomId: 'room-406', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-406b', roomId: 'room-406', bedLabel: 'B', occupied: false, patientId: null },
+  { id: 'bed-407a', roomId: 'room-407', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-408a', roomId: 'room-408', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-408b', roomId: 'room-408', bedLabel: 'B', occupied: true, patientId: 'patient-3' },
+  { id: 'bed-409a', roomId: 'room-409', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-409b', roomId: 'room-409', bedLabel: 'B', occupied: false, patientId: null },
+  { id: 'bed-410a', roomId: 'room-410', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-411a', roomId: 'room-411', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-412a', roomId: 'room-412', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-413a', roomId: 'room-413', bedLabel: 'A', occupied: false, patientId: null },
+  { id: 'bed-414a', roomId: 'room-414', bedLabel: 'A', occupied: false, patientId: null }
 ];
 
 export const patients: Patient[] = [

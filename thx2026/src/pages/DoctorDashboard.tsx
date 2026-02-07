@@ -1,16 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertList } from '../components/AlertList';
 import { RoomRow } from '../components/RoomRow';
+import { StatusPill } from '../components/StatusPill';
 import { StatCard } from '../components/StatCard';
 import { alerts as seedAlerts, beds, rooms } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 import { fetchPatients, type PatientRecord } from '../services/patientApi';
-import type { Room } from '../types';
+import type { Room, RoomStatus } from '../types';
+
+type FloorplanSlot = {
+  roomId: string;
+  label: string;
+  points: [number, number][];
+};
+
+const statusFills: Record<RoomStatus, { color: string; opacity: number }> = {
+  READY: { color: '#22c55e', opacity: 0.7 },
+  NOT_READY: { color: '#f59e0b', opacity: 0.75 },
+  CLEANING: { color: '#14b8a6', opacity: 0.75 },
+  NEEDS_MAINTENANCE: { color: '#f43f5e', opacity: 0.75 },
+  OCCUPIED: { color: '#dce5ef', opacity: 1 }
+};
 
 export function DoctorDashboard() {
+  const navigate = useNavigate();
   const [liveAlerts, setLiveAlerts] = useState(seedAlerts);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = realtimeBus.on('newAlert', ({ alert }) => {
@@ -102,6 +120,51 @@ export function DoctorDashboard() {
     };
   }, [derivedBeds, derivedRooms]);
 
+  const floorplanRooms: FloorplanSlot[] = useMemo(
+    () => [
+      { roomId: 'room-401', label: '401', points: [[0.524578, 0.346939], [0.524578, 0.260544], [0.333456, 0.261224], [0.380044, 0.346939]] },
+      { roomId: 'room-402', label: '402', points: [[0.526412, 0.260544], [0.526412, 0.347619], [0.668012, 0.347619], [0.668012, 0.260544]] },
+      { roomId: 'room-403', label: '403', points: [[0.669479, 0.260544], [0.669479, 0.347619], [0.811079, 0.347619], [0.811079, 0.260544]] },
+      { roomId: 'room-404', label: '404', points: [[0.812546, 0.260544], [0.812546, 0.347619], [0.954879, 0.347619], [0.954879, 0.260544]] },
+      { roomId: 'room-405', label: '405', points: [[0.330888, 0.266667], [0.245415, 0.42381], [0.290536, 0.508844], [0.376009, 0.35102]] },
+      { roomId: 'room-406', label: '406', points: [[0.396185, 0.382993], [0.396185, 0.492517], [0.524945, 0.492517], [0.524945, 0.382993]] },
+      { roomId: 'room-407', label: '407', points: [[0.526412, 0.382993], [0.526412, 0.492517], [0.668012, 0.492517], [0.668012, 0.382993]] },
+      { roomId: 'room-408', label: '408', points: [[0.669479, 0.382993], [0.669479, 0.492517], [0.811079, 0.492517], [0.811079, 0.382993]] },
+      { roomId: 'room-409', label: '409', points: [[0.812913, 0.382993], [0.812913, 0.492517], [0.954512, 0.492517], [0.954512, 0.382993]] },
+      { roomId: 'room-410', label: '410', points: [[0.392517, 0.387075], [0.309611, 0.540816], [0.337858, 0.595238], [0.392517, 0.495238]] },
+      { roomId: 'room-411', label: '411', points: [[0.243947, 0.427211], [0.158474, 0.585034], [0.203595, 0.669388], [0.289068, 0.512245]] },
+      { roomId: 'room-412', label: '412', points: [[0.308144, 0.543537], [0.220836, 0.704762], [0.24945, 0.758503], [0.336757, 0.597279]] },
+      { roomId: 'room-413', label: '413', points: [[0.15774, 0.588435], [0.069332, 0.751701], [0.114453, 0.836054], [0.202861, 0.672789]] },
+      { roomId: 'room-414', label: '414', points: [[0.219736, 0.708163], [0.132795, 0.868707], [0.161042, 0.922449], [0.248349, 0.761905]] }
+    ],
+    []
+  );
+
+  const labels = useMemo(() => {
+    return floorplanRooms.map((slot) => {
+      const centroid = slot.points.reduce(
+        (acc, point) => [acc[0] + point[0], acc[1] + point[1]],
+        [0, 0]
+      );
+      return {
+        roomId: slot.roomId,
+        label: slot.label,
+        x: centroid[0] / slot.points.length,
+        y: centroid[1] / slot.points.length
+      };
+    });
+  }, [floorplanRooms]);
+
+  const hoveredRoom = useMemo(
+    () => (hoveredRoomId ? derivedRooms.find((room) => room.id === hoveredRoomId) : null),
+    [derivedRooms, hoveredRoomId]
+  );
+
+  const hoveredLabel = useMemo(
+    () => (hoveredRoomId ? labels.find((label) => label.roomId === hoveredRoomId) : null),
+    [hoveredRoomId, labels]
+  );
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -137,6 +200,69 @@ export function DoctorDashboard() {
 
       <div className="grid gap-6 xl:grid-cols-[2.3fr_1fr]">
         <section className="space-y-3">
+          <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-panel">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-display font-semibold text-ink-900">Unit Floorplan</h2>
+              <span className="text-xs text-ink-400">Click a room to open</span>
+            </div>
+            <div className="mt-4 relative aspect-[2726/1470] w-full">
+              <img
+                src="/Floorplan.png"
+                alt="Hospital floorplan"
+                className="absolute inset-0 h-full w-full object-contain"
+              />
+              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
+                {floorplanRooms.map((slot) => {
+                  const room = derivedRooms.find((item) => item.id === slot.roomId);
+                  if (!room) return null;
+                  const points = slot.points.map((point) => `${point[0]},${point[1]}`).join(' ');
+                  const fill = statusFills[room.status];
+                  return (
+                    <g
+                      key={room.id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/rooms/${room.id}`)}
+                      onMouseEnter={() => setHoveredRoomId(room.id)}
+                      onMouseLeave={() => setHoveredRoomId(null)}
+                    >
+                      <polygon
+                        points={points}
+                        fill={fill.color}
+                        fillOpacity={fill.opacity}
+                        stroke="rgba(255,255,255,0.75)"
+                        strokeWidth="0.003"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+              <div className="pointer-events-none absolute inset-0">
+                {labels.map((label) => (
+                  <span
+                    key={label.roomId}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 text-xs font-semibold text-white drop-shadow"
+                    style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
+                  >
+                    {label.label}
+                  </span>
+                ))}
+              </div>
+              {hoveredRoom && hoveredLabel && (
+                <div
+                  className="absolute z-20 -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-white/70 bg-white/95 p-3 text-xs text-ink-700 shadow-xl"
+                  style={{ left: `${hoveredLabel.x * 100}%`, top: `${hoveredLabel.y * 100}%` }}
+                >
+                  <p className="text-sm font-semibold text-ink-900">Room {hoveredRoom.roomNumber}</p>
+                  <p className="text-xs text-ink-500">{hoveredRoom.type.replace('_', ' ')} • {hoveredRoom.unitId}</p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <StatusPill status={hoveredRoom.status} />
+                    <span className="text-[11px] text-ink-400">Click to open</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-display font-semibold text-ink-900">Unit Rooms</h2>
             <button className="rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700">
