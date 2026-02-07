@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertList } from '../components/AlertList';
 import { RoomRow } from '../components/RoomRow';
@@ -29,6 +29,11 @@ export function DoctorDashboard() {
   const [liveAlerts, setLiveAlerts] = useState(seedAlerts);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+  const floorplanRef = useRef<HTMLDivElement | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const isPanning = useRef(false);
+  const lastPointer = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const unsubscribe = realtimeBus.on('newAlert', ({ alert }) => {
@@ -85,15 +90,18 @@ export function DoctorDashboard() {
     return nextBeds;
   }, [patients]);
 
-  const derivedRooms = useMemo<Room[]>(() => {
-    const roomOccupancy = new Map<string, { occupied: number; total: number }>();
+  const roomOccupancy = useMemo(() => {
+    const occupancy = new Map<string, { occupied: number; total: number }>();
     derivedBeds.forEach((bed) => {
-      const entry = roomOccupancy.get(bed.roomId) ?? { occupied: 0, total: 0 };
+      const entry = occupancy.get(bed.roomId) ?? { occupied: 0, total: 0 };
       entry.total += 1;
       if (bed.occupied) entry.occupied += 1;
-      roomOccupancy.set(bed.roomId, entry);
+      occupancy.set(bed.roomId, entry);
     });
+    return occupancy;
+  }, [derivedBeds]);
 
+  const derivedRooms = useMemo<Room[]>(() => {
     return rooms.map((room): Room => {
       const occupancy = roomOccupancy.get(room.id);
       const isFull = occupancy ? occupancy.occupied >= occupancy.total && occupancy.total > 0 : false;
@@ -104,7 +112,7 @@ export function DoctorDashboard() {
         readinessReasons: []
       };
     });
-  }, [derivedBeds]);
+  }, [roomOccupancy]);
 
   const stats = useMemo(() => {
     const readyRooms = derivedRooms.filter((room) => room.status === 'READY').length;
@@ -165,6 +173,89 @@ export function DoctorDashboard() {
     [hoveredRoomId, labels]
   );
 
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+  const clampPan = (nextPan: { x: number; y: number }, nextZoom: number) => {
+    if (!floorplanRef.current) return nextPan;
+    const rect = floorplanRef.current.getBoundingClientRect();
+    const contentWidth = rect.width * nextZoom;
+    const contentHeight = rect.height * nextZoom;
+    const minX = Math.min(0, rect.width - contentWidth);
+    const minY = Math.min(0, rect.height - contentHeight);
+    return {
+      x: clamp(nextPan.x, minX, 0),
+      y: clamp(nextPan.y, minY, 0)
+    };
+  };
+  const MIN_ZOOM = 0.7;
+  const MAX_ZOOM = 3.5;
+
+  const zoomAt = (nextZoom: number, anchor?: { x: number; y: number }) => {
+    const clampedZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    if (!floorplanRef.current) return;
+    const rect = floorplanRef.current.getBoundingClientRect();
+    const anchorX = anchor?.x ?? rect.width / 2;
+    const anchorY = anchor?.y ?? rect.height / 2;
+    const scaleFactor = clampedZoom / zoom;
+    const nextPan = {
+      x: anchorX - (anchorX - pan.x) * scaleFactor,
+      y: anchorY - (anchorY - pan.y) * scaleFactor
+    };
+    setZoom(clampedZoom);
+    setPan(clampPan(nextPan, clampedZoom));
+  };
+
+  const handleWheel: React.WheelEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!floorplanRef.current) return;
+    const rect = floorplanRef.current.getBoundingClientRect();
+    const cursorX = event.clientX - rect.left;
+    const cursorY = event.clientY - rect.top;
+
+    if (event.ctrlKey) {
+      const delta = -event.deltaY;
+      const nextZoom = zoom * (1 + delta / 350);
+      zoomAt(nextZoom, { x: cursorX, y: cursorY });
+      return;
+    }
+
+    setPan((prev) =>
+      clampPan(
+        {
+          x: prev.x - event.deltaX,
+          y: prev.y - event.deltaY
+        },
+        zoom
+      )
+    );
+  };
+
+  const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.('[data-room-hit]')) {
+      return;
+    }
+    isPanning.current = true;
+    lastPointer.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove: React.PointerEventHandler<HTMLDivElement> = (event) => {
+    if (!isPanning.current) return;
+    const dx = event.clientX - lastPointer.current.x;
+    const dy = event.clientY - lastPointer.current.y;
+    lastPointer.current = { x: event.clientX, y: event.clientY };
+    setPan((prev) => clampPan({ x: prev.x + dx, y: prev.y + dy }, zoom));
+  };
+
+  const handlePointerUp: React.PointerEventHandler<HTMLDivElement> = (event) => {
+    if (!isPanning.current) return;
+    isPanning.current = false;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -205,69 +296,116 @@ export function DoctorDashboard() {
               <h2 className="text-lg font-display font-semibold text-ink-900">Unit Floorplan</h2>
               <span className="text-xs text-ink-400">Click a room to open</span>
             </div>
-            <div className="mt-4 relative aspect-[2726/1470] w-full">
-              <img
-                src="/Floorplan.png"
-                alt="Hospital floorplan"
-                className="absolute inset-0 h-full w-full object-contain"
-              />
-              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
-                {floorplanRooms.map((slot) => {
-                  const room = derivedRooms.find((item) => item.id === slot.roomId);
-                  if (!room) return null;
-                  const points = slot.points.map((point) => `${point[0]},${point[1]}`).join(' ');
-                  const fill = statusFills[room.status];
-                  return (
-                    <g
-                      key={room.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/rooms/${room.id}`)}
-                      onPointerEnter={() => setHoveredRoomId(room.id)}
-                      onPointerLeave={() => setHoveredRoomId(null)}
-                    >
-                      <polygon
-                        points={points}
-                        fill="transparent"
-                        stroke="transparent"
-                        strokeWidth="0.025"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <polygon
-                        points={points}
-                        fill={fill.color}
-                        fillOpacity={fill.opacity}
-                        stroke="rgba(255,255,255,0.75)"
-                        strokeWidth="0.003"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
-              <div className="pointer-events-none absolute inset-0">
-                {labels.map((label) => (
-                  <span
-                    key={label.roomId}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 text-xs font-semibold text-ink-950"
-                    style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
-                  >
-                    {label.label}
-                  </span>
-                ))}
-              </div>
-              {hoveredRoom && hoveredLabel && (
-                <div
-                  className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-white/70 bg-white/95 p-3 text-xs text-ink-700 shadow-xl"
-                  style={{ left: `${hoveredLabel.x * 100}%`, top: `${hoveredLabel.y * 100}%` }}
+            <div
+              ref={floorplanRef}
+              className="mt-4 relative aspect-[2726/1470] w-full overflow-hidden rounded-2xl bg-white/70 overscroll-none"
+              onWheel={handleWheel}
+              onWheelCapture={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+              style={{ touchAction: 'none' }}
+            >
+              <div className="absolute right-4 top-4 z-30 flex items-center gap-2 rounded-full border border-white/70 bg-white/90 p-1 shadow-panel">
+                <button
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => zoomAt(zoom * 0.9)}
+                  className="h-9 w-9 rounded-full text-lg font-semibold text-ink-900 hover:bg-ink-100/70"
+                  aria-label="Zoom out"
                 >
-                  <p className="text-sm font-semibold text-ink-900">Room {hoveredRoom.roomNumber}</p>
-                  <p className="text-xs text-ink-500">{hoveredRoom.type.replace('_', ' ')} • {hoveredRoom.unitId}</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <StatusPill status={hoveredRoom.status} />
-                    <span className="text-[11px] text-ink-400">Click to open</span>
-                  </div>
+                  −
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => zoomAt(zoom * 1.1)}
+                  className="h-9 w-9 rounded-full text-lg font-semibold text-ink-900 hover:bg-ink-100/70"
+                  aria-label="Zoom in"
+                >
+                  +
+                </button>
+              </div>
+              <div
+                className="absolute inset-0"
+                style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: '0 0'
+                }}
+              >
+                <img
+                  src="/Floorplan.png"
+                  alt="Hospital floorplan"
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+                <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
+                  {floorplanRooms.map((slot) => {
+                    const room = derivedRooms.find((item) => item.id === slot.roomId);
+                    if (!room) return null;
+                    const points = slot.points.map((point) => `${point[0]},${point[1]}`).join(' ');
+                    const occupancy = roomOccupancy.get(room.id);
+                    const isPartial =
+                      occupancy &&
+                      occupancy.total > 0 &&
+                      occupancy.occupied > 0 &&
+                      occupancy.occupied < occupancy.total;
+                    const fill = isPartial
+                      ? { color: '#fef0e0', opacity: 0.95 }
+                      : statusFills[room.status];
+                    return (
+                      <g
+                        key={room.id}
+                        data-room-hit
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/rooms/${room.id}`)}
+                        onPointerEnter={() => setHoveredRoomId(room.id)}
+                        onPointerLeave={() => setHoveredRoomId(null)}
+                      >
+                        <polygon
+                          points={points}
+                          fill="transparent"
+                          stroke="transparent"
+                          strokeWidth="0.025"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <polygon
+                          points={points}
+                          fill={fill.color}
+                          fillOpacity={fill.opacity}
+                          stroke="rgba(255,255,255,0.75)"
+                          strokeWidth="0.003"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+                <div className="pointer-events-none absolute inset-0">
+                  {labels.map((label) => (
+                    <span
+                      key={label.roomId}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 text-xs font-semibold text-ink-950"
+                      style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
+                    >
+                      {label.label}
+                    </span>
+                  ))}
                 </div>
-              )}
+                {hoveredRoom && hoveredLabel && (
+                  <div
+                    className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-white/70 bg-white/95 p-3 text-xs text-ink-700 shadow-xl"
+                    style={{ left: `${hoveredLabel.x * 100}%`, top: `${hoveredLabel.y * 100}%` }}
+                  >
+                    <p className="text-sm font-semibold text-ink-900">Room {hoveredRoom.roomNumber}</p>
+                    <p className="text-xs text-ink-500">{hoveredRoom.type.replace('_', ' ')} • {hoveredRoom.unitId}</p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <StatusPill status={hoveredRoom.status} />
+                      <span className="text-[11px] text-ink-400">Click to open</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between">
