@@ -16,6 +16,11 @@ function formatLastSeen(ts: number) {
 }
 
 export function SubjectCard({ subject, relayState, selected, onSelect }: SubjectCardProps) {
+  const roomBedLabel =
+    subject.roomLabel
+      ? `Room ${subject.roomLabel}${subject.bedLabel ? ` · Bed ${subject.bedLabel}` : ''}`
+      : 'No room assigned';
+
   return (
     <button
       type="button"
@@ -34,6 +39,7 @@ export function SubjectCard({ subject, relayState, selected, onSelect }: Subject
       </div>
       <p className="subject-card__focus">{selected ? 'Focused subject' : 'Click to focus'}</p>
       <p className="subject-card__meta">Last seen: {formatLastSeen(subject.lastSeenAt)}</p>
+      <p className="subject-card__meta">{roomBedLabel}</p>
       <MetricChips metrics={subject.latestMetrics} />
       <div className="subject-card__signals">
         <div className="subject-card__signals-title">Latest observed signals</div>

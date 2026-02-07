@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 import { clearPatientSession, getPatientSession } from '../services/patientSession';
+import { fetchPatientById, type PatientRecord } from '../services/patientApi';
+import { beds, rooms } from '../data/mock';
 
 type SpeechRecognition = any;
 
@@ -27,6 +29,7 @@ export function PatientPortalPage() {
   const [baymaxReply, setBaymaxReply] = useState<string | null>(null);
   const [baymaxError, setBaymaxError] = useState<string | null>(null);
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const shouldRunRef = useRef(true);
@@ -66,6 +69,19 @@ export function PatientPortalPage() {
       active = false;
     };
   }, [API_BASE, patient?.id]);
+
+  useEffect(() => {
+    let active = true;
+    if (!patient?.id) return () => undefined;
+    const loadPatient = async () => {
+      const result = await fetchPatientById(patient.id);
+      if (active) setPatientRecord(result);
+    };
+    void loadPatient();
+    return () => {
+      active = false;
+    };
+  }, [patient?.id]);
 
   useEffect(() => {
     const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
@@ -190,6 +206,17 @@ export function PatientPortalPage() {
       void askBaymax(payload);
     }, SILENCE_MS);
   };
+
+  const assignedBed = useMemo(() => {
+    if (!patientRecord?.bedId) return null;
+    return beds.find((bed) => bed.id === patientRecord.bedId) ?? null;
+  }, [patientRecord?.bedId]);
+
+  const assignedRoom = useMemo(() => {
+    const roomId = patientRecord?.roomId ?? assignedBed?.roomId;
+    if (!roomId) return null;
+    return rooms.find((room) => room.id === roomId) ?? null;
+  }, [assignedBed?.roomId, patientRecord?.roomId]);
 
   useEffect(() => {
     const SpeechRecognitionApi =
@@ -445,6 +472,10 @@ export function PatientPortalPage() {
               </h1>
               <p className="mt-3 text-base text-slate-600">
                 Say “baymax”, then speak your message. We will send it to your care team.
+              </p>
+              <p className="mt-3 text-sm text-slate-500">
+                {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room not assigned'}
+                {assignedBed ? ` · Bed ${assignedBed.bedLabel}` : ''}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">

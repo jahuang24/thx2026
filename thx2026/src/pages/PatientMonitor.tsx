@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { AgentFeedPanel } from '../components/AgentFeedPanel';
 import { PatientTrackerPanel } from '../components/PatientTrackerPanel';
 import { AutonomousRelayAgent } from '../agent/autonomousRelayAgent';
 import { startMonitorSession, type MonitorSession } from '../monitor/mediapipe';
+import { beds, rooms } from '../data/mock';
 import { useMonitorStore } from '../store/monitorStore';
 import type { CalibrationProfile, MonitorEvent, MonitorEventType, PatientSubject, RollingMetricsSnapshot } from '../types/monitor';
+import { fetchPatientById, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
+import { createAdmission, fetchAdmissions, updateAdmissionStatus } from '../services/admissionsApi';
 
 const CALIBRATION_SECONDS = 20;
 const zeroMetrics: RollingMetricsSnapshot = {
@@ -39,6 +43,10 @@ function updateSubject(subject: PatientSubject, updates: Partial<PatientSubject>
 
 export function PatientMonitorPage() {
   const { state, actions } = useMonitorStore();
+  const { patientId } = useParams();
+  const [patient, setPatient] = useState<PatientRecord | null>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
+  const [assignmentUpdating, setAssignmentUpdating] = useState(false);
   const [starting, setStarting] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationRemaining, setCalibrationRemaining] = useState(0);
@@ -80,6 +88,17 @@ export function PatientMonitorPage() {
     () => state.agentFeed.filter((message) => message.severity === 'HIGH').length,
     [state.agentFeed]
   );
+
+  const assignedBed = useMemo(() => {
+    if (!patient?.bedId) return null;
+    return beds.find((bed) => bed.id === patient.bedId) ?? null;
+  }, [patient?.bedId]);
+
+  const assignedRoom = useMemo(() => {
+    const roomId = patient?.roomId ?? assignedBed?.roomId;
+    if (!roomId) return null;
+    return rooms.find((room) => room.id === roomId) ?? null;
+  }, [assignedBed?.roomId, patient?.roomId]);
 
   const runAgentEvaluation = useCallback(async () => {
     if (evaluationRunningRef.current) {
@@ -314,6 +333,62 @@ export function PatientMonitorPage() {
   }, [runAgentEvaluation, state.monitorRunning]);
 
   useEffect(() => {
+    let active = true;
+    if (!patientId) {
+      setPatient(null);
+      setPatientLoading(false);
+      return () => undefined;
+    }
+    const load = async () => {
+      const result = await fetchPatientById(patientId);
+      if (active) {
+        setPatient(result);
+        setPatientLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [patientId]);
+
+  useEffect(() => {
+    if (!patient || !patient.id) {
+      return;
+    }
+    const roomLabel = assignedRoom?.roomNumber ?? null;
+    const bedLabel = assignedBed?.bedLabel ?? null;
+    const existing = state.subjects.find((subject) => subject.id === patient.id);
+    if (!existing) {
+      const subject: PatientSubject = {
+        id: patient.id,
+        label: patient.name ?? 'Patient',
+        status: 'INACTIVE',
+        lastSeenAt: 0,
+        latestMetrics: zeroMetrics,
+        latestObservedSignals: [],
+        roomLabel,
+        bedLabel
+      };
+      actions.setSubjects([subject], patient.id);
+      return;
+    }
+    actions.upsertSubject(
+      updateSubject(existing, {
+        label: patient.name ?? existing.label,
+        roomLabel,
+        bedLabel
+      })
+    );
+  }, [
+    actions,
+    assignedBed?.bedLabel,
+    assignedRoom?.roomNumber,
+    patient,
+    state.subjects
+  ]);
+
+  useEffect(() => {
     const status = relayAgentRef.current.getStatus();
     setAgentBackendLabel(status.configured ? status.backend : 'RULES');
     setAgentBackendError(status.lastError);
@@ -335,6 +410,22 @@ export function PatientMonitorPage() {
             <p className="mt-1 text-sm text-ink-500">
               Non-diagnostic. Flags observable behavior patterns only.
             </p>
+            {patient ? (
+              <div className="mt-2 space-y-1 text-sm text-ink-600">
+                <div>
+                  {patient.name ?? 'Patient'} · MRN {patient.mrn || 'Unknown'}
+                </div>
+                <div>
+                  {assignedRoom
+                    ? `Room ${assignedRoom.roomNumber}${assignedBed ? ` · Bed ${assignedBed.bedLabel}` : ''}`
+                    : 'No room assigned'}
+                </div>
+              </div>
+            ) : patientLoading ? (
+              <p className="mt-2 text-sm text-ink-500">Loading patient...</p>
+            ) : (
+              <p className="mt-2 text-sm text-rose-600">Patient record not found.</p>
+            )}
             <p className="mt-2 text-xs text-ink-400">
               Agent backend: <span className="font-semibold text-ink-700">{agentBackendLabel}</span>
               {agentBackendError ? ` (fallback active: ${agentBackendError})` : ''}
@@ -371,6 +462,34 @@ export function PatientMonitorPage() {
               onClick={resetAll}
             >
               Reset
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-ink-200 px-4 py-2 text-xs font-semibold text-ink-700 disabled:opacity-60"
+              onClick={async () => {
+                if (!patient?.id || assignmentUpdating) return;
+                setAssignmentUpdating(true);
+                const cleared = await updatePatientAssignment(patient.id, {
+                  roomId: null,
+                  bedId: null,
+                  unitId: null
+                });
+                if (cleared) {
+                  const admissions = await fetchAdmissions();
+                  const existing = admissions.find((item) => item.patientId === patient.id);
+                  if (existing) {
+                    await updateAdmissionStatus(existing.id, { admitStatus: 'PENDING' });
+                  } else {
+                    await createAdmission({ patientId: patient.id, admitStatus: 'PENDING' });
+                  }
+                  const refreshed = await fetchPatientById(patient.id);
+                  setPatient(refreshed);
+                }
+                setAssignmentUpdating(false);
+              }}
+              disabled={!patient?.id || assignmentUpdating}
+            >
+              {assignmentUpdating ? 'Updating...' : 'Return to admissions'}
             </button>
           </div>
         </div>

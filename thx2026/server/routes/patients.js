@@ -129,6 +129,14 @@ router.post("/login", async (req, res) => {
         readByNurse: false,
         readByPatient: true
       });
+      const admissions = db.collection("Admissions");
+      await admissions.insertOne({
+        patientId: String(result.insertedId),
+        requestedType: "MED_SURG",
+        requestedUnit: "MED-SURG",
+        admitStatus: "PENDING",
+        requestedAt: new Date().toISOString()
+      });
     } catch (err) {
       console.error("Failed to create welcome message:", err);
     }
@@ -153,6 +161,33 @@ router.get("/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send("Error fetching patient");
+  }
+});
+
+// Update patient assignment (room/bed)
+router.patch("/:id", async (req, res) => {
+  try {
+    const { roomId, bedId, unitId } = req.body || {};
+    const updates = { $set: {} };
+    if (typeof roomId === "string" || roomId === null) updates.$set.roomId = roomId ?? null;
+    if (typeof bedId === "string" || bedId === null) updates.$set.bedId = bedId ?? null;
+    if (typeof unitId === "string" || unitId === null) updates.$set.unitId = unitId ?? null;
+
+    if (!Object.keys(updates.$set).length) {
+      res.status(400).send("No valid fields to update");
+      return;
+    }
+
+    const db = getDb();
+    const collection = db.collection("Patients");
+    const result = await collection.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      updates
+    );
+    res.status(200).send(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error updating patient");
   }
 });
 

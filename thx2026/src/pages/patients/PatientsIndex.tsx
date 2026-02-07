@@ -1,7 +1,22 @@
 import { Link } from 'react-router-dom';
-import { patients } from '../../data/mock';
+import { useEffect, useState } from 'react';
+import { fetchPatients, type PatientRecord } from '../../services/patientApi';
 
 export function PatientsIndexPage() {
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const result = await fetchPatients();
+      if (active) setPatients(result);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       <header className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-panel">
@@ -25,6 +40,11 @@ export function PatientsIndexPage() {
             </div>
           </div>
         ))}
+        {patients.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-ink-200 bg-white/80 p-4 text-sm text-ink-500">
+            No patients found.
+          </div>
+        )}
       </div>
     </div>
   );
