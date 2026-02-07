@@ -11,17 +11,22 @@ export function OverviewPage() {
   const [messages, setMessages] = useState(store.messages);
 
   useEffect(() => {
-    const unsubscribe = realtimeBus.on('newAlert', ({ alert }) => {
-      setLiveAlerts((prev) => [alert as typeof prev[number], ...prev]);
-    });
-    const unsubscribeMessages = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
-    const unsubscribeMessagesUpdated = realtimeBus.on('messageUpdated', () =>
+    const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
+    const unsubscribeUpdated = realtimeBus.on('messageUpdated', () =>
       setMessages([...store.messages])
     );
     return () => {
+      unsubscribeNew();
+      unsubscribeUpdated();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = realtimeBus.on('newAlert', ({ alert }) => {
+      setLiveAlerts((prev) => [alert as typeof prev[number], ...prev]);
+    });
+    return () => {
       unsubscribe();
-      unsubscribeMessages();
-      unsubscribeMessagesUpdated();
     };
   }, []);
 

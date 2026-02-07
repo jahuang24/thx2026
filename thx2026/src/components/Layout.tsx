@@ -5,11 +5,13 @@ import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [messageVersion, setMessageVersion] = useState(0);
+  const [messages, setMessages] = useState(store.messages);
 
   useEffect(() => {
-    const unsubscribeNew = realtimeBus.on('newMessage', () => setMessageVersion((prev) => prev + 1));
-    const unsubscribeUpdated = realtimeBus.on('messageUpdated', () => setMessageVersion((prev) => prev + 1));
+    const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
+    const unsubscribeUpdated = realtimeBus.on('messageUpdated', () =>
+      setMessages([...store.messages])
+    );
     return () => {
       unsubscribeNew();
       unsubscribeUpdated();
@@ -17,8 +19,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const unreadMessages = useMemo(
-    () => store.messages.filter((message) => message.sender === 'PATIENT' && !message.readByNurse).length,
-    [messageVersion]
+    () => messages.filter((message) => message.sender === 'PATIENT' && !message.readByNurse).length,
+    [messages]
   );
 
   const navItems = [

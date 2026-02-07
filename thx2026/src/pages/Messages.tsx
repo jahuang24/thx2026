@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { patients } from '../data/mock';
-import type { Message } from '../types';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
 
@@ -8,7 +7,7 @@ const formatTime = (value: string) =>
   new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 export function MessagesPage() {
-  const [messages, setMessages] = useState<Message[]>(store.messages);
+  const [messages, setMessages] = useState(store.messages);
   const [activePatientId, setActivePatientId] = useState<string>(() => patients[0]?.id ?? '');
   const [draft, setDraft] = useState('');
 
