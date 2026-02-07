@@ -39,7 +39,7 @@ function App() {
       <Route
         path="/doctor-dashboard"
         element={
-          <Layout>
+          <Layout pageTitle="Unit Overview">
             <DoctorDashboard />
           </Layout>
         }
@@ -47,7 +47,7 @@ function App() {
       <Route
         path="/monitor"
         element={
-          <Layout>
+          <Layout pageTitle="Patient Monitor">
             <MonitorStoreProvider>
               <PatientMonitorPage />
             </MonitorStoreProvider>
@@ -57,7 +57,7 @@ function App() {
       <Route
         path="/rooms"
         element={
-          <Layout>
+          <Layout pageTitle="Rooms">
             <RoomsIndexPage />
           </Layout>
         }
@@ -65,7 +65,7 @@ function App() {
       <Route
         path="/rooms/:roomId"
         element={
-          <Layout>
+          <Layout pageTitle="Room Detail">
             <RoomDetailPage />
           </Layout>
         }
@@ -73,7 +73,7 @@ function App() {
       <Route
         path="/patients"
         element={
-          <Layout>
+          <Layout pageTitle="Patients">
             <PatientsIndexPage />
           </Layout>
         }
@@ -81,7 +81,7 @@ function App() {
       <Route
         path="/patients/:patientId"
         element={
-          <Layout>
+          <Layout pageTitle="Patient Detail">
             <PatientDetailPage />
           </Layout>
         }
@@ -89,7 +89,7 @@ function App() {
       <Route
         path="/admissions"
         element={
-          <Layout>
+          <Layout pageTitle="Admissions & Placement">
             <AdmissionsPage />
           </Layout>
         }
@@ -97,7 +97,7 @@ function App() {
       <Route
         path="/tasks"
         element={
-          <Layout>
+          <Layout pageTitle="Tasks">
             <TasksPage />
           </Layout>
         }
@@ -105,7 +105,7 @@ function App() {
       <Route
         path="/messages"
         element={
-          <Layout>
+          <Layout pageTitle="Patient Messages">
             <MessagesPage />
           </Layout>
         }
@@ -113,7 +113,7 @@ function App() {
       <Route
         path="/alerts"
         element={
-          <Layout>
+          <Layout pageTitle="Alerts">
             <AlertsPage />
           </Layout>
         }
@@ -121,7 +121,7 @@ function App() {
       <Route
         path="/admin"
         element={
-          <Layout>
+          <Layout pageTitle="Admin">
             <AdminPage />
           </Layout>
         }
@@ -130,7 +130,7 @@ function App() {
       <Route
         path="*"
         element={
-          <Layout>
+          <Layout pageTitle="Not Found">
             <NotFoundPage />
           </Layout>
         }
