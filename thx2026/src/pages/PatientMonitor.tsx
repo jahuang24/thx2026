@@ -6,7 +6,12 @@ import { AutonomousRelayAgent } from '../agent/autonomousRelayAgent';
 import { startMonitorSession, type MonitorSession } from '../monitor/mediapipe';
 import { beds, patients, rooms } from '../data/mock';
 import { useMonitorStore } from '../store/monitorStore';
-import type { CalibrationProfile, PatientSubject, RollingMetricsSnapshot } from '../types/monitor';
+import type {
+  CalibrationProfile,
+  PatientSubject,
+  RollingMetricsSnapshot,
+  MonitorEvent
+} from '../types/monitor';
 import { fetchPatientById, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
 import { createAdmission, fetchAdmissions, updateAdmissionStatus } from '../services/admissionsApi';
 import { store as appStore } from '../services/store';

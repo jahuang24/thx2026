@@ -212,20 +212,22 @@ export function DoctorDashboard() {
   };
 
   const nearestCorridorAnchor = (point: Coordinate): CorridorAnchor | null => {
-    let best: { anchor: CorridorAnchor; dist2: number } | null = null;
-    corridorGraph.edges.forEach((edge) => {
+    let bestAnchor: CorridorAnchor | null = null;
+    let bestDist2 = Number.POSITIVE_INFINITY;
+    for (const edge of corridorGraph.edges) {
       const from = corridorGraph.nodes[edge.from];
       const to = corridorGraph.nodes[edge.to];
-      if (from?.x === undefined || from?.y === undefined || to?.x === undefined || to?.y === undefined) return;
+      if (from?.x === undefined || from?.y === undefined || to?.x === undefined || to?.y === undefined) continue;
       const projected = projectToSegment(point, { x: from.x, y: from.y }, { x: to.x, y: to.y });
       const dx = point.x - projected.x;
       const dy = point.y - projected.y;
       const dist2 = dx * dx + dy * dy;
-      if (!best || dist2 < best.dist2) {
-        best = { anchor: { point: projected, edge: [edge.from, edge.to] }, dist2 };
+      if (dist2 < bestDist2) {
+        bestDist2 = dist2;
+        bestAnchor = { point: projected, edge: [edge.from, edge.to] };
       }
-    });
-    return best?.anchor ?? null;
+    }
+    return bestAnchor;
   };
 
   const anchorEdges = (id: GraphNodeId, anchor: CorridorAnchor) => {
