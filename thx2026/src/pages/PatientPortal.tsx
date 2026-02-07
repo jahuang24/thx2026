@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { realtimeBus } from '../services/realtime';
@@ -17,8 +16,8 @@ const WAKE_WORD = 'baymax';
 const SILENCE_MS = 1200;
 
 export function PatientPortalPage() {
-
   const [micState, setMicState] = useState<MicState>('idle');
+  const [micEnabled, setMicEnabled] = useState(false);
   const [mode, setMode] = useState<Mode>('WAITING');
   const [captured, setCaptured] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +31,7 @@ export function PatientPortalPage() {
   const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const shouldRunRef = useRef(true);
+  const shouldRunRef = useRef(false);
   const wakeIndexRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const modeRef = useRef<Mode>('WAITING');
@@ -120,10 +119,10 @@ export function PatientPortalPage() {
     utterance.pitch = 1;
     utterance.lang = 'en-US';
     utterance.onend = () => {
-      shouldRunRef.current = true;
+      shouldRunRef.current = micEnabled;
       try {
         recognitionRef.current?.start?.();
-        setMicState('listening');
+        setMicState(micEnabled ? 'listening' : 'idle');
       } catch {
         setMicState('idle');
       }
@@ -170,7 +169,7 @@ export function PatientPortalPage() {
       speak(reply);
       await sendExchangeToNurse(question, reply);
       window.setTimeout(() => {
-        shouldRunRef.current = true;
+        shouldRunRef.current = micEnabled;
         try {
           recognitionRef.current?.start?.();
         } catch {}
@@ -186,24 +185,25 @@ export function PatientPortalPage() {
     silenceTimerRef.current = window.setTimeout(async () => {
       if (modeRef.current !== 'CAPTURING') return;
       const payload = capturedRef.current;
+      const normalizedPayload = payload.trim();
       const shouldSendToNurse = sendToNurseRef.current || awaitingNurseMessageRef.current;
       sendToNurseRef.current = false;
       awaitingNurseMessageRef.current = false;
       resetCapture();
-      if (!payload.trim()) {
+      if (!normalizedPayload) {
         setError('I heard “baymax”, but did not catch a request. Try again.');
         return;
       }
+      speak(`You said: ${normalizedPayload}.`);
       if (shouldSendToNurse) {
-        const sent = await sendToDoctor(payload);
+        const sent = await sendToDoctor(normalizedPayload);
         if (!sent) {
           setError('Unable to send your message. Try again.');
           return;
         }
-        speak('Got it.');
         return;
       }
-      void askBaymax(payload);
+      void askBaymax(normalizedPayload);
     }, SILENCE_MS);
   };
 
@@ -234,7 +234,6 @@ export function PatientPortalPage() {
       return;
     }
 
-    shouldRunRef.current = true;
     const recognition = new SpeechRecognitionApi();
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -251,10 +250,12 @@ export function PatientPortalPage() {
       setLiveTranscript(combined);
 
       if (modeRef.current === 'WAITING') {
-        const loweredLatest = latestChunk.toLowerCase();
-        const idxLatest = loweredLatest.lastIndexOf(WAKE_WORD);
-        if (idxLatest < 0) return;
-        const afterWake = latestChunk.slice(idxLatest + WAKE_WORD.length).trim();
+        const loweredCombined = combined.toLowerCase();
+        const idxCombined = loweredCombined.lastIndexOf(WAKE_WORD);
+        if (idxCombined < 0) return;
+        if (wakeIndexRef.current !== null && idxCombined <= wakeIndexRef.current) return;
+        wakeIndexRef.current = idxCombined;
+        const afterWake = combined.slice(idxCombined + WAKE_WORD.length).trim();
         const loweredAfter = afterWake.toLowerCase();
         const normalizedAfter = loweredAfter.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
         const nurseCommand =
@@ -316,7 +317,7 @@ export function PatientPortalPage() {
 
     recognition.onend = () => {
       setMicState('idle');
-      if (!shouldRunRef.current) return;
+      if (!shouldRunRef.current || !micEnabled) return;
       try {
         recognition.start();
       } catch {
@@ -325,26 +326,8 @@ export function PatientPortalPage() {
     };
 
     recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch {
-      setMicState('idle');
-    }
-
-    const handleGestureStart = () => {
-      if (!recognitionRef.current) return;
-      shouldRunRef.current = true;
-      try {
-        recognitionRef.current.start();
-        setMicState('listening');
-      } catch {}
-    };
-    window.addEventListener('click', handleGestureStart, { once: true });
-    window.addEventListener('touchstart', handleGestureStart, { once: true });
 
     return () => {
-      window.removeEventListener('click', handleGestureStart);
-      window.removeEventListener('touchstart', handleGestureStart);
       shouldRunRef.current = false;
       clearSilenceTimer();
       try {
@@ -352,11 +335,11 @@ export function PatientPortalPage() {
       } catch {}
       recognitionRef.current = null;
     };
-  }, []);
+  }, [micEnabled]);
 
   useEffect(() => {
     const watchdog = window.setInterval(() => {
-      if (!shouldRunRef.current) return;
+      if (!micEnabled || !shouldRunRef.current) return;
       if (!recognitionRef.current) return;
       if (micState === 'listening') return;
       try {
@@ -366,7 +349,7 @@ export function PatientPortalPage() {
       }
     }, 4000);
     return () => window.clearInterval(watchdog);
-  }, [micState]);
+  }, [micEnabled, micState]);
 
   const handleEnableMic = async () => {
     setError(null);
@@ -375,6 +358,7 @@ export function PatientPortalPage() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((track) => track.stop());
       }
+      setMicEnabled(true);
       shouldRunRef.current = true;
       try {
         recognitionRef.current?.start?.();
@@ -399,6 +383,7 @@ export function PatientPortalPage() {
 
   const handleDisableMic = () => {
     shouldRunRef.current = false;
+    setMicEnabled(false);
     try {
       recognitionRef.current?.stop?.();
     } catch {}
@@ -499,7 +484,7 @@ export function PatientPortalPage() {
                       mode === 'WAITING' ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'
                     }`}
                   />
-                  {mode === 'WAITING' ? 'Ready' : 'Listening'}
+                  {micEnabled ? (mode === 'WAITING' ? 'Ready' : 'Listening') : 'Mic Off'}
                 </span>
               </div>
               <p className="mt-3 text-base text-slate-700">
@@ -508,18 +493,20 @@ export function PatientPortalPage() {
                   : 'Pause when finished and we will send it.'}
               </p>
               {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
-              <button
-                onClick={handleEnableMic}
-                className="mt-4 rounded-full bg-slate-900 px-5 py-2 text-xs font-semibold text-white"
-              >
-                Enable microphone
-              </button>
-              <button
-                onClick={handleDisableMic}
-                className="mt-4 rounded-full border border-slate-200 bg-white px-5 py-2 text-xs font-semibold text-slate-700"
-              >
-                Disable microphone
-              </button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={handleEnableMic}
+                  className="rounded-full bg-slate-900 px-5 py-2 text-xs font-semibold text-white"
+                >
+                  Enable microphone
+                </button>
+                <button
+                  onClick={handleDisableMic}
+                  className="rounded-full border border-slate-200 bg-white px-5 py-2 text-xs font-semibold text-slate-700"
+                >
+                  Disable microphone
+                </button>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -619,114 +606,93 @@ export function PatientPortalPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Medications</p>
-                    <p className="mt-1">
-                      {medicalRecord.medications?.length ? medicalRecord.medications.join(', ') : 'None listed'}
-                    </p>
-                  </div>
-                  {medicalRecord.notes ? (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Notes</p>
-                      <p className="mt-1">{medicalRecord.notes}</p>
-                    </div>
-                  ) : null}
-                  <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Documents</p>
-                    {medicalRecord.documents?.length ? (
-                      <ul className="mt-2 space-y-2">
+                    {Array.isArray(medicalRecord.documents) && medicalRecord.documents.length > 0 ? (
+                      <div className="mt-2 space-y-2">
                         {medicalRecord.documents.map((doc: any, index: number) => (
-                          <li key={`${doc.name ?? 'document'}-${index}`}>
-                            <a
-                              className="text-sm font-semibold text-slate-700 underline"
-                              href={`data:${doc.type ?? 'application/pdf'};base64,${doc.data}`}
-                              download={doc.name ?? `document-${index + 1}.pdf`}
-                            >
-                              {doc.name ?? `Document ${index + 1}`}
-                            </a>
-                          </li>
+                          <div
+                            key={doc.id ?? `${doc.name ?? 'doc'}-${index}`}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                          >
+                            <p className="text-sm font-semibold text-slate-800">
+                              {doc.title ?? doc.name ?? `Document ${index + 1}`}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {doc.type ?? 'Document'}
+                              {doc.createdAt ? ` · ${new Date(doc.createdAt).toLocaleDateString()}` : ''}
+                            </p>
+                            {doc.summary && <p className="mt-1 text-xs text-slate-600">{doc.summary}</p>}
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     ) : (
-                      <p className="mt-1 text-sm text-slate-500">No documents uploaded.</p>
+                      <p className="mt-1 text-sm text-slate-500">No documents available.</p>
                     )}
                   </div>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-slate-500">No record found.</p>
+                <p className="mt-3 text-sm text-slate-500">No record available.</p>
               )}
             </div>
           </div>
         </section>
 
-        <section className="space-y-6">
-          <div className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                  Vitals
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Latest Readings</h2>
-              </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                Stable
-              </span>
+        <section className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+                Today
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-900">Vitals & Journey</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Live stats and your care journey timeline.
+              </p>
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {vitals.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-2xl border border-slate-200 bg-white p-5"
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    {item.label}
-                  </p>
-                  <div className="mt-2 flex items-end gap-2">
-                    <p className="text-3xl font-semibold text-slate-900">{item.value}</p>
-                    <span className="text-xs text-slate-500">{item.unit}</span>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">{item.note}</p>
-                </div>
-              ))}
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+              {assignedRoom ? `Room ${assignedRoom.roomNumber}` : 'Room pending'}
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-                  Your Care Journey
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Where You Are</h2>
-              </div>
-              <span className="text-xs text-slate-400">Room TBD</span>
+          <div className="mt-6 grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {vitals.map((vital) => (
+                <div key={vital.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs text-slate-400">{vital.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {vital.value}
+                    <span className="ml-1 text-sm font-medium text-slate-400">{vital.unit}</span>
+                  </p>
+                  <p className="mt-2 text-xs text-emerald-600">{vital.note}</p>
+                </div>
+              ))}
             </div>
-            <div className="mt-4 space-y-3">
-              {journey.map((step, index) => {
-                const isCurrent = index === currentStepIndex;
-                const isComplete = index < currentStepIndex;
-                return (
-                  <div
-                    key={step.label}
-                    className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${
-                      isCurrent
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : isComplete
-                          ? 'border-emerald-200 bg-emerald-50/80 text-slate-800'
-                          : 'border-slate-100 bg-white text-slate-700'
-                    }`}
-                  >
-                    <div>
-                      <p className="text-sm font-semibold">{step.label}</p>
-                      <p className={`text-xs ${isCurrent ? 'text-white/70' : 'text-slate-400'}`}>
-                        {isCurrent ? 'In progress' : isComplete ? 'Complete' : 'Upcoming'}
-                      </p>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-900">Care Journey</p>
+                <span className="text-xs text-slate-400">Today</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {journey.map((step, index) => {
+                  const isActive = index === currentStepIndex;
+                  const isComplete = index < currentStepIndex;
+                  return (
+                    <div
+                      key={step.label}
+                      className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${
+                        isActive
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      <span className="font-semibold">{step.label}</span>
+                      <span className="text-xs">
+                        {isComplete ? 'Completed' : isActive ? 'In progress' : step.time}
+                      </span>
                     </div>
-                    <span className={`text-xs ${isCurrent ? 'text-white/70' : 'text-slate-400'}`}>
-                      {step.time}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
         </section>
