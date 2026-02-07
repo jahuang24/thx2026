@@ -14,9 +14,12 @@ const DEDALUS_CHAT_MODEL = process.env.DEDALUS_CHAT_MODEL || process.env.VITE_DE
 const BAYMAX_MAX_EMBED_CHUNKS = Number(process.env.BAYMAX_MAX_EMBED_CHUNKS || 80);
 const BAYMAX_EMBED_MAX_NEW_PER_TURN = Number(process.env.BAYMAX_EMBED_MAX_NEW_PER_TURN || 8);
 const BAYMAX_EMBED_BATCH_SIZE = Number(process.env.BAYMAX_EMBED_BATCH_SIZE || 4);
-const BAYMAX_CONTEXT_MESSAGES = Number(process.env.BAYMAX_CONTEXT_MESSAGES || 8);
-const BAYMAX_DOC_TEXT_MAX_CHARS = Number(process.env.BAYMAX_DOC_TEXT_MAX_CHARS || 4000);
-const BAYMAX_CHAT_MAX_TOKENS = Number(process.env.BAYMAX_CHAT_MAX_TOKENS || 120);
+const BAYMAX_CONTEXT_MESSAGES = Number(process.env.BAYMAX_CONTEXT_MESSAGES || 4);
+const BAYMAX_DOC_TEXT_MAX_CHARS = Number(process.env.BAYMAX_DOC_TEXT_MAX_CHARS || 1400);
+const BAYMAX_CHAT_MAX_TOKENS = Number(process.env.BAYMAX_CHAT_MAX_TOKENS || 64);
+const BAYMAX_CHAT_TIMEOUT_MS = Number(process.env.BAYMAX_CHAT_TIMEOUT_MS || 12000);
+const BAYMAX_RANKED_CONTEXT_CHUNKS = Number(process.env.BAYMAX_RANKED_CONTEXT_CHUNKS || 3);
+const BAYMAX_REPLY_MAX_CHARS = Number(process.env.BAYMAX_REPLY_MAX_CHARS || 180);
 const BAYMAX_SKIP_QUERY_EMBED =
   String(process.env.BAYMAX_SKIP_QUERY_EMBED ?? "true").trim().toLowerCase() !== "false";
 const BAYMAX_VOICE_ID = process.env.BAYMAX_VOICE_ID || "5e3JKXK83vvgQqBcdUol";
@@ -55,6 +58,15 @@ const cosineSimilarity = (a, b) => {
 const hashText = (text) =>
   crypto.createHash("sha256").update(text).digest("hex");
 
+const normalizeBaymaxReply = (value) => {
+  const compact = String(value || "").replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "I am here. Please say that again in one short sentence.";
+  }
+  const firstSentence = compact.split(/(?<=[.!?])\s+/)[0] || compact;
+  return firstSentence.slice(0, BAYMAX_REPLY_MAX_CHARS);
+};
+
 async function embedText(text) {
   if (!DEDALUS_API_KEY) {
     throw new Error("Missing DEDALUS_API_KEY");
@@ -82,22 +94,30 @@ async function chatResponse(system, user) {
   if (!DEDALUS_API_KEY) {
     throw new Error("Missing DEDALUS_API_KEY");
   }
-  const response = await fetch(`${DEDALUS_API_URL}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${DEDALUS_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: DEDALUS_CHAT_MODEL,
-      temperature: 0.2,
-      max_tokens: BAYMAX_CHAT_MAX_TOKENS,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BAYMAX_CHAT_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`${DEDALUS_API_URL}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${DEDALUS_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: DEDALUS_CHAT_MODEL,
+        temperature: 0.2,
+        max_tokens: BAYMAX_CHAT_MAX_TOKENS,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Chat failed: ${detail}`);
@@ -379,7 +399,7 @@ router.post("/:id/chat", async (req, res) => {
     const recentMessages = await messagesCol
       .find({ patientId })
       .sort({ sentAt: -1 })
-      .limit(20)
+      .limit(Math.max(6, BAYMAX_CONTEXT_MESSAGES))
       .toArray();
 
     const medicalRecord = patient.medicalRecord || {};
@@ -462,7 +482,7 @@ router.post("/:id/chat", async (req, res) => {
     let ranked = [];
     if (existingEmbeddings.length > 0) {
       if (BAYMAX_SKIP_QUERY_EMBED) {
-        ranked = existingEmbeddings.slice(0, 6).map((item) => item.text);
+        ranked = existingEmbeddings.slice(0, BAYMAX_RANKED_CONTEXT_CHUNKS).map((item) => item.text);
       } else {
         const queryEmbedding = await embedText(String(message));
         ranked = existingEmbeddings
@@ -471,7 +491,7 @@ router.post("/:id/chat", async (req, res) => {
             score: cosineSimilarity(queryEmbedding, item.embedding),
           }))
           .sort((a, b) => b.score - a.score)
-          .slice(0, 6)
+          .slice(0, BAYMAX_RANKED_CONTEXT_CHUNKS)
           .map((item) => item.text);
       }
     }
@@ -492,13 +512,20 @@ router.post("/:id/chat", async (req, res) => {
       "Use the provided context from the patient's medical record, messages, and vitals.",
       "Offer general medical information, not a diagnosis.",
       "If unsure or if symptoms seem severe, advise contacting the care team.",
-      "Keep answers very short (1-3 sentences), clear, and reassuring.",
+      "Reply with one short sentence in plain language.",
+      "Keep the answer under 18 words.",
       "Do not say Baymax in your answer."
     ].join(" ");
 
     const userPrompt = `Patient question: ${message}\\n\\nContext:\\n${contextBlock}`;
 
-    const reply = await chatResponse(systemPrompt, userPrompt);
+    let reply;
+    try {
+      reply = normalizeBaymaxReply(await chatResponse(systemPrompt, userPrompt));
+    } catch (chatErr) {
+      console.warn("Baymax chat timeout/failure, using fast fallback.", chatErr?.message || chatErr);
+      reply = "I heard you. Please ask again briefly while I reconnect.";
+    }
 
     await chats.insertMany([
       { patientId, role: "user", content: String(message), createdAt: new Date().toISOString() },

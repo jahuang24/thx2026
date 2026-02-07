@@ -14,7 +14,9 @@ type Mode = 'WAITING' | 'CAPTURING';
 type MicState = 'idle' | 'listening' | 'blocked' | 'unsupported' | 'error';
 
 const WAKE_WORD = 'baymax';
-const SILENCE_MS = 700;
+const SILENCE_MS = 300;
+const BAYMAX_CHAT_TIMEOUT_MS = 12000;
+const BAYMAX_CHAT_RETRY_TIMEOUT_MS = 18000;
 
 export function PatientPortalPage() {
   const { rooms, beds } = useFacilityData();
@@ -35,6 +37,7 @@ export function PatientPortalPage() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const shouldRunRef = useRef(false);
+  const micEnabledRef = useRef(false);
   const wakeIndexRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const modeRef = useRef<Mode>('WAITING');
@@ -111,6 +114,10 @@ export function PatientPortalPage() {
   }, [patient?.id]);
 
   useEffect(() => {
+    micEnabledRef.current = micEnabled;
+  }, [micEnabled]);
+
+  useEffect(() => {
     const unsubscribeNew = realtimeBus.on('newMessage', () => {
       if (!patient?.id) return;
       setMessages(store.messages.filter((msg) => msg.patientId === patient.id));
@@ -160,11 +167,42 @@ export function PatientPortalPage() {
   };
 
   const resumeMicAfterSpeech = () => {
-    shouldRunRef.current = micEnabled;
-    if (!micEnabled) return;
+    shouldRunRef.current = micEnabledRef.current;
+    if (!micEnabledRef.current) return;
     try {
       recognitionRef.current?.start?.();
     } catch {}
+  };
+
+  const speakWithBrowserFallback = async (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      return false;
+    }
+    return new Promise<boolean>((resolve) => {
+      try {
+        const synthesis = window.speechSynthesis;
+        synthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.95;
+        utterance.pitch = 0.9;
+        utterance.volume = 1;
+
+        const voices = synthesis.getVoices();
+        const preferredVoice =
+          voices.find((voice) => /^en/i.test(voice.lang) && /Google|Microsoft|Samantha|Zira/i.test(voice.name)) ??
+          voices.find((voice) => /^en/i.test(voice.lang)) ??
+          null;
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
+
+        utterance.onend = () => resolve(true);
+        utterance.onerror = () => resolve(false);
+        synthesis.speak(utterance);
+      } catch {
+        resolve(false);
+      }
+    });
   };
 
   const speak = async (text: string) => {
@@ -234,9 +272,16 @@ export function PatientPortalPage() {
       const code = (err as any)?.code;
       if (code === 'VOICE_QUOTA_EXCEEDED') {
         voiceQuotaExceededRef.current = true;
-        setBaymaxError('Baymax voice credits are exhausted. Baymax will reply in text until credits are refilled.');
+      }
+      const fallbackSpoken = await speakWithBrowserFallback(safeText);
+      if (!fallbackSpoken) {
+        if (code === 'VOICE_QUOTA_EXCEEDED') {
+          setBaymaxError('Baymax voice service is unavailable right now.');
+        } else {
+          setBaymaxError('Voice service unavailable. Baymax replied in text only.');
+        }
       } else {
-        setBaymaxError('Voice service unavailable. Baymax replied in text only.');
+        setBaymaxError(null);
       }
     } finally {
       resumeMicAfterSpeech();
@@ -265,19 +310,33 @@ export function PatientPortalPage() {
     if (!patient?.id) return;
     setBaymaxError(null);
     setBaymaxReply(null);
-    try {
-      const response = await fetch(`${API_BASE}/patients/${patient.id}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: question })
-      });
-      if (!response.ok) {
-        setBaymaxError('Unable to reach Baymax right now.');
-        await speak('I am having trouble connecting right now. Please try again.');
-        return;
+    const fetchReplyWithTimeout = async (timeoutMs: number) => {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(`${API_BASE}/patients/${patient.id}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: question }),
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new Error(`BAYMAX_HTTP_${response.status}`);
+        }
+        const data = await response.json();
+        return (data.reply ?? '').trim() || 'I am here. How can I help you further?';
+      } finally {
+        window.clearTimeout(timeoutId);
       }
-      const data = await response.json();
-      const reply = (data.reply ?? '').trim() || 'I am here. How can I help you further?';
+    };
+
+    try {
+      let reply: string;
+      try {
+        reply = await fetchReplyWithTimeout(BAYMAX_CHAT_TIMEOUT_MS);
+      } catch {
+        reply = await fetchReplyWithTimeout(BAYMAX_CHAT_RETRY_TIMEOUT_MS);
+      }
       setBaymaxReply(reply);
       await speak(reply);
       await sendExchangeToNurse(question, reply);
@@ -308,7 +367,7 @@ export function PatientPortalPage() {
           setError('Unable to send your message. Try again.');
           return;
         }
-        shouldRunRef.current = micEnabled;
+        shouldRunRef.current = micEnabledRef.current;
         try {
           recognitionRef.current?.start?.();
         } catch {}
@@ -416,8 +475,10 @@ export function PatientPortalPage() {
         const latestResult = event.results[event.results.length - 1];
         const message = latestChunk.trim();
         setLiveTranscript(combined);
-        setCaptured(message);
-        capturedRef.current = message;
+        if (message) {
+          setCaptured(message);
+          capturedRef.current = message;
+        }
         if (latestResult?.isFinal) {
           clearSilenceTimer();
           void dispatchCapturedMessage();
@@ -446,7 +507,7 @@ export function PatientPortalPage() {
 
     recognition.onend = () => {
       setMicState('idle');
-      if (!shouldRunRef.current || !micEnabled) return;
+      if (!shouldRunRef.current || !micEnabledRef.current) return;
       try {
         recognition.start();
       } catch {
@@ -464,7 +525,7 @@ export function PatientPortalPage() {
       } catch {}
       recognitionRef.current = null;
     };
-  }, [micEnabled]);
+  }, []);
 
   useEffect(() => {
     const watchdog = window.setInterval(() => {
@@ -488,6 +549,7 @@ export function PatientPortalPage() {
         stream.getTracks().forEach((track) => track.stop());
       }
       setMicEnabled(true);
+      micEnabledRef.current = true;
       shouldRunRef.current = true;
       try {
         recognitionRef.current?.start?.();
@@ -513,6 +575,7 @@ export function PatientPortalPage() {
   const handleDisableMic = () => {
     shouldRunRef.current = false;
     setMicEnabled(false);
+    micEnabledRef.current = false;
     try {
       recognitionRef.current?.stop?.();
     } catch {}
