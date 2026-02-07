@@ -77,16 +77,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <header className="flex flex-col gap-2 border-b border-white/70 bg-white/70 px-8 py-6 backdrop-blur">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-ink-500">Live hospital flow command</p>
                 <h1 className="text-2xl font-display font-semibold text-ink-950">Operational Dashboard</h1>
               </div>
-              <div className="rounded-full bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-600">
-                Assistive CV flags require human verification
-              </div>
             </div>
-            <p className="text-xs text-ink-500">
-              HIPAA-sensitive view. Minimize PHI and verify alert context before action.
-            </p>
           </header>
           <div className="px-8 py-6">{children}</div>
         </main>
