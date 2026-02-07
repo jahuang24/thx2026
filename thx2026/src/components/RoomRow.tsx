@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Bed, Patient, Room } from '../types';
 import { StatusPill } from './StatusPill';
+import { normalizeBedId, normalizeRoomId } from '../services/patientApi';
 
 export function RoomRow({
   room,
@@ -14,7 +15,15 @@ export function RoomRow({
   const roomBeds = beds.filter((bed) => bed.roomId === room.id);
   const occupiedBeds = roomBeds.filter((bed) => bed.occupied);
   const patientNames = occupiedBeds
-    .map((bed) => patients.find((patient) => patient.id === bed.patientId))
+    .map((bed) => {
+      const patient = patients.find((candidate) => candidate.id === bed.patientId);
+      if (!patient) return null;
+      const normalizedRoom = normalizeRoomId(patient.roomId);
+      const normalizedBed = normalizeBedId(patient.bedId, normalizedRoom);
+      if (normalizedRoom && normalizedRoom !== room.id) return null;
+      if (normalizedBed && normalizedBed !== bed.id) return null;
+      return patient;
+    })
     .filter(Boolean)
     .map((patient) => patient?.name ?? 'Patient');
 

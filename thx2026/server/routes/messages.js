@@ -4,16 +4,22 @@ import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
-// Retrieve a list of all Messages
+// Retrieve messages (bounded). For best perf, pass patientId.
 router.get("/", async (req, res) => {
   try {
-    let db = getDb(); // Get the db instance
-    let collection = db.collection("Messages");
+    const db = getDb();
+    const collection = db.collection("Messages");
     const { patientId, sender } = req.query;
     const query = {};
     if (patientId) query.patientId = String(patientId);
     if (sender) query.sender = String(sender);
-    let results = await collection.find(query).sort({ sentAt: -1 }).toArray();
+
+    const results = await collection
+      .find(query)
+      .sort({ sentAt: -1 })
+      .limit(200)
+      .toArray();
+
     res.status(200).send(results);
   } catch (err) {
     console.error(err);

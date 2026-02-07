@@ -1,5 +1,6 @@
 import type { Alert, Bed, Message, Patient, Room } from '../types';
 import type { PatientRecord } from '../services/patientApi';
+import { normalizeBedId, normalizeRoomId } from '../services/patientApi';
 
 export type TriageLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -189,6 +190,8 @@ export function buildTriageEntries({
   const bedById = new Map(beds.map((item) => [item.id, item]));
 
   const entries = patients.map((patient) => {
+    const roomId = normalizeRoomId(patient.roomId);
+    const bedId = normalizeBedId(patient.bedId, roomId);
     const seeded = seededById.get(patient.id);
     const openAlerts = alerts.filter((alert) => alert.status === 'OPEN' && alert.patientId === patient.id);
     const patientMessages = messages.filter(
@@ -241,8 +244,8 @@ export function buildTriageEntries({
       reasons.push(...messageSignal.reasons);
     }
 
-    const bed = patient.bedId ? bedById.get(patient.bedId) : undefined;
-    const room = roomById.get(patient.roomId ?? bed?.roomId ?? '');
+    const bed = bedId ? bedById.get(bedId) : undefined;
+    const room = roomById.get(roomId ?? bed?.roomId ?? '');
     const roomLabel = room?.roomNumber ?? 'Unassigned';
     const bedLabel = bed?.bedLabel ?? 'Unassigned';
     if (!room || !bed) {
