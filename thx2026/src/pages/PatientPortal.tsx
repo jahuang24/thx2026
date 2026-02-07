@@ -150,6 +150,7 @@ export function PatientPortalPage() {
     wakeIndexRef.current = null;
     setCaptured('');
     capturedRef.current = '';
+    setLiveTranscript('');
     clearSilenceTimer();
   };
 
@@ -250,13 +251,16 @@ export function PatientPortalPage() {
         setError('I heard “baymax”, but did not catch a request. Try again.');
         return;
       }
-      speak(`You said: ${normalizedPayload}.`);
       if (shouldSendToNurse) {
         const sent = await sendToDoctor(normalizedPayload);
         if (!sent) {
           setError('Unable to send your message. Try again.');
           return;
         }
+        shouldRunRef.current = micEnabled;
+        try {
+          recognitionRef.current?.start?.();
+        } catch {}
         return;
       }
       void askBaymax(normalizedPayload);
@@ -305,7 +309,6 @@ export function PatientPortalPage() {
         .join(' ')
         .trim();
       if (!combined && !latestChunk) return;
-      setLiveTranscript(combined);
 
       if (modeRef.current === 'WAITING') {
         const loweredCombined = combined.toLowerCase();
@@ -314,6 +317,7 @@ export function PatientPortalPage() {
         if (wakeIndexRef.current !== null && idxCombined <= wakeIndexRef.current) return;
         wakeIndexRef.current = idxCombined;
         const afterWake = combined.slice(idxCombined + WAKE_WORD.length).trim();
+        setLiveTranscript(afterWake);
         const loweredAfter = afterWake.toLowerCase();
         const normalizedAfter = loweredAfter.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
         const nurseCommand =
@@ -350,6 +354,7 @@ export function PatientPortalPage() {
 
       if (modeRef.current === 'CAPTURING') {
         const message = latestChunk.trim();
+        setLiveTranscript(combined);
         setCaptured(message);
         capturedRef.current = message;
         scheduleSend();
@@ -465,7 +470,7 @@ export function PatientPortalPage() {
     if (!patient?.id) return [];
     return messages
       .filter((msg) => msg.patientId === patient.id)
-      .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   }, [messages, patient?.id]);
 
   const formatChatBody = (body: string) => {
@@ -740,11 +745,6 @@ export function PatientPortalPage() {
                       >
                         Clear
                       </button>
-                      {baymaxReply && (
-                        <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm text-ink-700">
-                          {baymaxReply}
-                        </div>
-                      )}
                       {(baymaxError || error) && (
                         <p className="mt-3 text-xs text-rose-600">{baymaxError || error}</p>
                       )}
@@ -770,7 +770,7 @@ export function PatientPortalPage() {
                     {chatMessages.length === 0 ? (
                       <p className="text-sm text-ink-500">No messages yet.</p>
                     ) : (
-                      chatMessages.slice(-6).map((msg) => (
+                      chatMessages.slice(0, 6).map((msg) => (
                         <div
                           key={msg.id}
                           className={`rounded-2xl border px-4 py-3 text-sm ${
