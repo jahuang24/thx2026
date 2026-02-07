@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { TopNav } from './components/TopNav';
 import { sensors, rooms } from './data/mock';
 import { AdminPage } from './pages/Admin';
 import { AdmissionsPage } from './pages/Admissions';
@@ -11,12 +10,14 @@ import { DoctorLogin } from './pages/DoctorLogin';
 import { Login } from './pages/Login';
 import { MessagesPage } from './pages/Messages';
 import { NotFoundPage } from './pages/NotFound';
+import { PatientLogin } from './pages/PatientLogin';
 import { PatientDetailPage } from './pages/PatientDetail';
 import { PatientMonitorPage } from './pages/PatientMonitor';
 import { PatientPortalPage } from './pages/PatientPortal';
 import { RoomDetailPage } from './pages/RoomDetail';
 import { RoomsIndexPage } from './pages/RoomsIndex';
 import { TasksPage } from './pages/Tasks';
+import { TriagePage } from './pages/Triage';
 import { PatientsIndexPage } from './pages/patients/PatientsIndex';
 import { startCvSimulator } from './services/cvSimulator';
 import { MonitorStoreProvider } from './store/monitorStore';
@@ -35,27 +36,38 @@ function App() {
     <Routes>
       <Route path="/" element={<Login />} />
       <Route path="/doctor-login" element={<DoctorLogin />} />
+      <Route path="/patient-login" element={<PatientLogin />} />
       <Route
         path="/doctor-dashboard"
         element={
-          <Layout>
+          <Layout pageTitle="Unit Overview">
             <DoctorDashboard />
           </Layout>
         }
       />
+      
       <Route
-        path="/monitor"
+        path="/monitor/:patientId"
         element={
-          <MonitorStoreProvider>
-            <TopNav />
-            <PatientMonitorPage />
-          </MonitorStoreProvider>
+          <Layout pageTitle="Patient Monitor">
+            <MonitorStoreProvider>
+              <PatientMonitorPage />
+            </MonitorStoreProvider>
+          </Layout>
+        }
+      />
+      <Route
+        path="/triage-board"
+        element={
+          <Layout pageTitle="Triage Board">
+            <TriagePage />
+          </Layout>
         }
       />
       <Route
         path="/rooms"
         element={
-          <Layout>
+          <Layout pageTitle="Rooms">
             <RoomsIndexPage />
           </Layout>
         }
@@ -63,7 +75,7 @@ function App() {
       <Route
         path="/rooms/:roomId"
         element={
-          <Layout>
+          <Layout pageTitle="Room Detail">
             <RoomDetailPage />
           </Layout>
         }
@@ -71,7 +83,7 @@ function App() {
       <Route
         path="/patients"
         element={
-          <Layout>
+          <Layout pageTitle="Patients">
             <PatientsIndexPage />
           </Layout>
         }
@@ -79,7 +91,7 @@ function App() {
       <Route
         path="/patients/:patientId"
         element={
-          <Layout>
+          <Layout pageTitle="Patient Detail">
             <PatientDetailPage />
           </Layout>
         }
@@ -87,7 +99,7 @@ function App() {
       <Route
         path="/admissions"
         element={
-          <Layout>
+          <Layout pageTitle="Admissions & Placement">
             <AdmissionsPage />
           </Layout>
         }
@@ -95,7 +107,7 @@ function App() {
       <Route
         path="/tasks"
         element={
-          <Layout>
+          <Layout pageTitle="Tasks">
             <TasksPage />
           </Layout>
         }
@@ -103,7 +115,7 @@ function App() {
       <Route
         path="/messages"
         element={
-          <Layout>
+          <Layout pageTitle="Patient Messages">
             <MessagesPage />
           </Layout>
         }
@@ -111,7 +123,7 @@ function App() {
       <Route
         path="/alerts"
         element={
-          <Layout>
+          <Layout pageTitle="Alerts">
             <AlertsPage />
           </Layout>
         }
@@ -119,7 +131,7 @@ function App() {
       <Route
         path="/admin"
         element={
-          <Layout>
+          <Layout pageTitle="Admin">
             <AdminPage />
           </Layout>
         }
@@ -128,7 +140,7 @@ function App() {
       <Route
         path="*"
         element={
-          <Layout>
+          <Layout pageTitle="Not Found">
             <NotFoundPage />
           </Layout>
         }

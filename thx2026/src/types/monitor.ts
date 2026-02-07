@@ -33,6 +33,8 @@ export interface PatientSubject {
   lastSeenAt: number;
   latestMetrics: RollingMetricsSnapshot;
   latestObservedSignals: string[];
+  roomLabel?: string | null;
+  bedLabel?: string | null;
 }
 
 export type AgentSeverity = 'LOW' | 'MED' | 'HIGH';

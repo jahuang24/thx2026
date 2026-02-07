@@ -1,20 +1,122 @@
-import { useMemo, useState } from 'react';
-import { admissions, beds, patients, rooms } from '../data/mock';
+import { useMemo, useState, useEffect } from 'react';
+import { beds, rooms } from '../data/mock';
 import { recommendBeds } from '../logic/recommendation';
-import type { Admission, RecommendationScore } from '../types';
+import type { RecommendationScore, Room } from '../types';
+import { fetchPatients, updatePatientAssignment, type PatientRecord } from '../services/patientApi';
+import {
+  ensureAdmissionsQueue,
+  fetchAdmissions,
+  updateAdmissionStatus,
+  type AdmissionRecord
+} from '../services/admissionsApi';
 
 export function AdmissionsPage() {
-  const [selectedAdmission, setSelectedAdmission] = useState<Admission | null>(admissions[1]);
+  const [admissions, setAdmissions] = useState<AdmissionRecord[]>([]);
+  const [selectedAdmission, setSelectedAdmission] = useState<AdmissionRecord | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationScore[]>([]);
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [assigningBedId, setAssigningBedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const result = await fetchPatients();
+      if (active) setPatients(result);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      await ensureAdmissionsQueue();
+      const result = await fetchAdmissions();
+      if (active) {
+        setAdmissions(result);
+        if (!selectedAdmission && result.length) {
+          setSelectedAdmission(result[0]);
+        }
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [selectedAdmission]);
 
   const pendingAdmissions = useMemo(
     () => admissions.filter((admission) => admission.admitStatus === 'PENDING'),
-    []
+    [admissions]
   );
 
-  const handleRecommend = (admission: Admission) => {
+  const derivedBeds = useMemo(() => {
+    const occupiedByBed = new Map<string, string>();
+    patients.forEach((patient) => {
+      if (patient.bedId) {
+        occupiedByBed.set(patient.bedId, patient.id);
+      }
+    });
+    return beds.map((bed) => ({
+      ...bed,
+      occupied: occupiedByBed.has(bed.id),
+      patientId: occupiedByBed.get(bed.id) ?? null
+    }));
+  }, [patients]);
+
+  const derivedRooms = useMemo<Room[]>(() => {
+    const roomOccupancy = new Map<string, { occupied: number; total: number }>();
+    derivedBeds.forEach((bed) => {
+      const entry = roomOccupancy.get(bed.roomId) ?? { occupied: 0, total: 0 };
+      entry.total += 1;
+      if (bed.occupied) entry.occupied += 1;
+      roomOccupancy.set(bed.roomId, entry);
+    });
+
+    return rooms.map((room): Room => {
+      const occupancy = roomOccupancy.get(room.id);
+      const isFull = occupancy ? occupancy.occupied >= occupancy.total && occupancy.total > 0 : false;
+      return {
+        ...room,
+        status: isFull ? 'OCCUPIED' : 'READY',
+        maintenanceFlags: [],
+        readinessReasons: []
+      };
+    });
+  }, [derivedBeds]);
+
+  const handleRecommend = (admission: AdmissionRecord) => {
     setSelectedAdmission(admission);
-    setRecommendations(recommendBeds(admission, rooms, beds, patients));
+    const enrichedPatients = patients.map((patient) => ({
+      ...patient,
+      acuityLevel: 'LOW',
+      mobilityRisk: 'LOW',
+      fallRisk: false,
+      unitId: 'unit-1'
+    }));
+    setRecommendations(recommendBeds(admission as any, derivedRooms, derivedBeds as any, enrichedPatients as any));
+  };
+
+  const handleAssign = async (admission: AdmissionRecord, recommendation: RecommendationScore) => {
+    if (assigningBedId) return;
+    if (!admission.patientId) return;
+    setAssigningBedId(recommendation.bedId);
+    const assignedAt = new Date().toISOString();
+    const success = await updatePatientAssignment(admission.patientId, {
+      roomId: recommendation.roomId,
+      bedId: recommendation.bedId
+    });
+    if (success) {
+      await updateAdmissionStatus(admission.id, { admitStatus: 'ASSIGNED', assignedAt });
+      const [nextAdmissions, nextPatients] = await Promise.all([fetchAdmissions(), fetchPatients()]);
+      setAdmissions(nextAdmissions);
+      setPatients(nextPatients);
+      setRecommendations([]);
+      setSelectedAdmission(null);
+    }
+    setAssigningBedId(null);
   };
 
   return (
@@ -87,8 +189,12 @@ export function AdmissionsPage() {
                           <li key={item}>• {item}</li>
                         ))}
                       </ul>
-                      <button className="mt-3 rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700">
-                        Assign
+                      <button
+                        className="mt-3 rounded-full border border-ink-200 px-3 py-1 text-xs font-semibold text-ink-700 disabled:opacity-60"
+                        onClick={() => selectedAdmission && handleAssign(selectedAdmission, rec)}
+                        disabled={assigningBedId === rec.bedId}
+                      >
+                        {assigningBedId === rec.bedId ? 'Assigning...' : 'Assign'}
                       </button>
                     </div>
                   ))}

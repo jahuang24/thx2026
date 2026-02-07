@@ -20,15 +20,6 @@ export const emptyMetrics: RollingMetricsSnapshot = {
   movementLevel: 0
 };
 
-const defaultSubject: PatientSubject = {
-  id: 'S-001',
-  label: 'Subject A',
-  status: 'INACTIVE',
-  lastSeenAt: 0,
-  latestMetrics: emptyMetrics,
-  latestObservedSignals: []
-};
-
 export interface MonitorStoreState {
   subjects: PatientSubject[];
   events: MonitorEvent[];
@@ -44,6 +35,7 @@ interface MonitorStoreActions {
   addEvent: (event: MonitorEvent) => void;
   addAgentMessage: (message: AgentMessage) => void;
   setMonitorRunning: (running: boolean) => void;
+  setSubjects: (subjects: PatientSubject[], selectedSubjectId?: string) => void;
   selectSubject: (subjectId: string) => void;
   setAgentState: (subjectId: string, state: RelayState) => void;
   setCalibration: (calibration: CalibrationProfile | null) => void;
@@ -60,18 +52,19 @@ type Action =
   | { type: 'ADD_EVENT'; payload: MonitorEvent }
   | { type: 'ADD_AGENT_MESSAGE'; payload: AgentMessage }
   | { type: 'SET_MONITOR_RUNNING'; payload: boolean }
+  | { type: 'SET_SUBJECTS'; payload: { subjects: PatientSubject[]; selectedSubjectId?: string } }
   | { type: 'SELECT_SUBJECT'; payload: string }
   | { type: 'SET_AGENT_STATE'; payload: { subjectId: string; state: RelayState } }
   | { type: 'SET_CALIBRATION'; payload: CalibrationProfile | null }
   | { type: 'RESET_ALL' };
 
 const initialState: MonitorStoreState = {
-  subjects: [defaultSubject],
+  subjects: [],
   events: [],
   agentFeed: [],
   monitorRunning: false,
-  selectedSubjectId: defaultSubject.id,
-  agentStateBySubject: { [defaultSubject.id]: 'NEUTRAL' },
+  selectedSubjectId: '',
+  agentStateBySubject: {},
   calibration: null
 };
 
@@ -101,6 +94,20 @@ function reducer(state: MonitorStoreState, action: Action): MonitorStoreState {
     }
     case 'SET_MONITOR_RUNNING':
       return { ...state, monitorRunning: action.payload };
+    case 'SET_SUBJECTS': {
+      const subjects = action.payload.subjects;
+      const selectedSubjectId = action.payload.selectedSubjectId ?? subjects[0]?.id ?? '';
+      const agentStateBySubject = subjects.reduce<Record<string, RelayState>>((acc, subject) => {
+        acc[subject.id] = state.agentStateBySubject[subject.id] ?? 'NEUTRAL';
+        return acc;
+      }, {});
+      return {
+        ...state,
+        subjects,
+        selectedSubjectId,
+        agentStateBySubject
+      };
+    }
     case 'SELECT_SUBJECT':
       return { ...state, selectedSubjectId: action.payload };
     case 'SET_AGENT_STATE':
@@ -131,6 +138,8 @@ export function MonitorStoreProvider({ children }: { children: ReactNode }) {
       addEvent: (event) => dispatch({ type: 'ADD_EVENT', payload: event }),
       addAgentMessage: (message) => dispatch({ type: 'ADD_AGENT_MESSAGE', payload: message }),
       setMonitorRunning: (running) => dispatch({ type: 'SET_MONITOR_RUNNING', payload: running }),
+      setSubjects: (subjects, selectedSubjectId) =>
+        dispatch({ type: 'SET_SUBJECTS', payload: { subjects, selectedSubjectId } }),
       selectSubject: (subjectId) => dispatch({ type: 'SELECT_SUBJECT', payload: subjectId }),
       setAgentState: (subjectId, relayState) =>
         dispatch({ type: 'SET_AGENT_STATE', payload: { subjectId, state: relayState } }),

@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertList } from '../components/AlertList';
 import { RoomRow } from '../components/RoomRow';
 import { StatCard } from '../components/StatCard';
-import { alerts as seedAlerts, beds, patients, rooms } from '../data/mock';
+import { alerts as seedAlerts, beds, rooms } from '../data/mock';
 import { realtimeBus } from '../services/realtime';
 import { store } from '../services/store';
+import { fetchPatients, type PatientRecord } from '../services/patientApi';
+import type { Room } from '../types';
 
 export function DoctorDashboard() {
   const [liveAlerts, setLiveAlerts] = useState(seedAlerts);
   const [messages, setMessages] = useState(store.messages);
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
 
   useEffect(() => {
     const unsubscribeNew = realtimeBus.on('newMessage', () => setMessages([...store.messages]));
@@ -30,11 +33,78 @@ export function DoctorDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const result = await fetchPatients();
+      if (active) setPatients(result);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const derivedBeds = useMemo(() => {
+    const occupiedByBed = new Map<string, string>();
+    const occupiedByRoom = new Map<string, string[]>();
+    patients.forEach((patient) => {
+      if (patient.bedId) {
+        occupiedByBed.set(patient.bedId, patient.id);
+        return;
+      }
+      if (patient.roomId) {
+        const list = occupiedByRoom.get(patient.roomId) ?? [];
+        list.push(patient.id);
+        occupiedByRoom.set(patient.roomId, list);
+      }
+    });
+
+    const nextBeds = beds.map((bed) => ({
+      ...bed,
+      occupied: occupiedByBed.has(bed.id),
+      patientId: occupiedByBed.get(bed.id) ?? null
+    }));
+
+    occupiedByRoom.forEach((patientIds, roomId) => {
+      patientIds.forEach((patientId) => {
+        const target = nextBeds.find((bed) => bed.roomId === roomId && !bed.occupied);
+        if (target) {
+          target.occupied = true;
+          target.patientId = patientId;
+        }
+      });
+    });
+
+    return nextBeds;
+  }, [patients]);
+
+  const derivedRooms = useMemo<Room[]>(() => {
+    const roomOccupancy = new Map<string, { occupied: number; total: number }>();
+    derivedBeds.forEach((bed) => {
+      const entry = roomOccupancy.get(bed.roomId) ?? { occupied: 0, total: 0 };
+      entry.total += 1;
+      if (bed.occupied) entry.occupied += 1;
+      roomOccupancy.set(bed.roomId, entry);
+    });
+
+    return rooms.map((room): Room => {
+      const occupancy = roomOccupancy.get(room.id);
+      const isFull = occupancy ? occupancy.occupied >= occupancy.total && occupancy.total > 0 : false;
+      return {
+        ...room,
+        status: isFull ? 'OCCUPIED' : 'READY',
+        maintenanceFlags: [],
+        readinessReasons: []
+      };
+    });
+  }, [derivedBeds]);
+
   const stats = useMemo(() => {
-    const readyRooms = rooms.filter((room) => room.status === 'READY').length;
-    const cleaningRooms = rooms.filter((room) => room.status === 'CLEANING').length;
-    const occupiedBeds = beds.filter((bed) => bed.occupied).length;
-    const occupancyRate = Math.round((occupiedBeds / beds.length) * 100);
+    const readyRooms = derivedRooms.filter((room) => room.status === 'READY').length;
+    const cleaningRooms = derivedRooms.filter((room) => room.status === 'CLEANING').length;
+    const occupiedBeds = derivedBeds.filter((bed) => bed.occupied).length;
+    const occupancyRate = Math.round((occupiedBeds / derivedBeds.length) * 100);
     const unreadMessages = messages.filter(
       (message) => message.sender === 'PATIENT' && !message.readByNurse
     ).length;
@@ -46,7 +116,7 @@ export function DoctorDashboard() {
       openAlerts: store.alerts.filter((alert) => alert.status === 'OPEN').length,
       unreadMessages
     };
-  }, [messages]);
+  }, [derivedBeds, derivedRooms, messages]);
 
   return (
     <div className="space-y-6">
@@ -97,8 +167,8 @@ export function DoctorDashboard() {
             </button>
           </div>
           <div className="space-y-3">
-            {rooms.map((room) => (
-              <RoomRow key={room.id} room={room} beds={beds} patients={patients} />
+            {derivedRooms.map((room) => (
+              <RoomRow key={room.id} room={room} beds={derivedBeds} patients={patients as any} />
             ))}
           </div>
         </section>
