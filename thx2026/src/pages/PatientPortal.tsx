@@ -490,7 +490,7 @@ export function PatientPortalPage() {
                 Your Care Assistant
               </p>
               <h1 className="mt-3 text-3xl font-semibold text-ink-900">
-                Hello, {patient?.name ?? 'there'}
+                Hello {patient?.name ?? 'there'}
               </h1>
               <p className="mt-3 text-base text-ink-600">
                 Say “baymax”, then speak your message. We will send it to your care team.
