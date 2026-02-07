@@ -12,6 +12,7 @@ import { MessagesPage } from './pages/Messages';
 import { NotFoundPage } from './pages/NotFound';
 import { PatientDetailPage } from './pages/PatientDetail';
 import { PatientMonitorPage } from './pages/PatientMonitor';
+import PatientMonitorSearch from './pages/PatientMonitorSearch';
 import { PatientPortalPage } from './pages/PatientPortal';
 import { RoomDetailPage } from './pages/RoomDetail';
 import { RoomsIndexPage } from './pages/RoomsIndex';
@@ -44,6 +45,14 @@ function App() {
       />
       <Route
         path="/monitor"
+        element={
+          <Layout pageTitle="Patient Monitor">
+            <PatientMonitorSearch />
+          </Layout>
+        }
+      />
+      <Route
+        path="/monitor/:patientId"
         element={
           <Layout pageTitle="Patient Monitor">
             <MonitorStoreProvider>
