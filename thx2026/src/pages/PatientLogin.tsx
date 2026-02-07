@@ -84,21 +84,23 @@ export function PatientLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f3f7ff,_#ffffff_55%,_#f7fafc)] px-6 py-12 text-slate-900">
-      <div className="mx-auto grid w-full max-w-4xl gap-6 rounded-[32px] border border-slate-200 bg-white/90 p-8 shadow-xl md:grid-cols-[1.05fr_1fr]">
+    <div className="min-h-screen px-6 py-12 text-slate-900">
+      <div className="mx-auto w-full max-w-4xl gap-6 rounded-[32px] border border-white/80 bg-white/80 p-8 shadow-panel md:grid-cols-[1.1fr_1fr]">
+        
         <div className="space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Patient Portal</p>
-          <h1 className="text-3xl font-semibold text-slate-900">Welcome to your bedside care</h1>
-          <p className="text-sm text-slate-600">
-            Sign in to see messages from your care team and share your health record.
-          </p>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-500">
-            First-time patients must provide basic medical records to help your care team.
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => navigate('/')}
+              className="rounded-full bg-slate-200 px-6 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-300"
+            >
+              ←
+            </button>
+            <p className="text-3xl font-semibold uppercase tracking-[0.25em] text-black">Patient Portal</p>
+            <div className="w-20"></div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-600">
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -130,8 +132,8 @@ export function PatientLogin() {
               >
                 New patient
               </button>
-            </div>
           </div>
+
           <div>
             <label className="text-xs font-semibold text-slate-600">Full name</label>
             <input
@@ -180,7 +182,7 @@ export function PatientLogin() {
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
                 />
                 <p className="mt-2 text-xs text-slate-500">
-                  {documents.length ? `${documents.length} file(s) selected` : 'No files selected'}
+                  {documents.length ? `${documents.length} file(s) selected` : ''}
                 </p>
               </div>
               <div>
@@ -198,19 +200,22 @@ export function PatientLogin() {
 
           {error && <p className="text-xs text-rose-600">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
-          >
-            {loading
-              ? mode === 'new'
-                ? 'Creating profile…'
-                : 'Signing in…'
-              : mode === 'new'
-                ? 'Create profile'
-                : 'Sign in'}
-          </button>
+          <div className="w-full flex items-center justify-center">
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-full bg-ink-900 px-10 py-4 text-sm font-semibold text-white"
+            >
+              {loading
+                ? mode === 'new'
+                  ? 'Creating profile…'
+                  : 'Signing in…'
+                : mode === 'new'
+                  ? 'Create profile'
+                  : 'Sign in'}
+            </button>
+          </div>
+
         </form>
       </div>
     </div>

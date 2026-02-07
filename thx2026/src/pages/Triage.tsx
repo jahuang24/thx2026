@@ -241,11 +241,8 @@ export function TriagePage() {
     <div className="space-y-6">
       <header className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-panel">
         <h2 className="text-xl font-display font-semibold text-ink-900">Triage Board</h2>
-        <p className="mt-1 text-sm text-ink-500">
-          Color-coded symptom severity classification for rapid prioritization.
-        </p>
         <p className="mt-2 text-xs text-ink-500">
-          Dedalus triage assist:{' '}
+          Dedalus Triage Assist:{' '}
           <span className="font-semibold text-ink-700">
             {dedalusState === 'OFF'
               ? 'OFF'

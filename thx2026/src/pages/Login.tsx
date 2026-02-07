@@ -22,14 +22,14 @@ export function Login() {
 
           {/* Hospital Portal Button */}
           <button onClick={() => navigate('/doctor-login')}
-            className="min-w-[240px] rounded-full bg-ink-900 px-12 py-5 text-lg font-semibold text-white transition-all hover:shadow-[0_0_15px_#ae6bff] active:scale-95 shadow-xl"
+            className="min-w-[240px] rounded-full bg-ink-900 px-12 py-5 text-lg font-semibold text-white transition-all hover:shadow-[0_0_15px_#ae6bff] active:scale-95"
           >
             Hospital Portal
           </button>
           
           {/* Patient Portal Button */}
           <button onClick={() => navigate('/patient-login')}
-            className="min-w-[240px] rounded-full border border-ink-200 bg-white px-12 py-5 text-lg font-semibold text-ink-900 transition-all hover:shadow-[0_0_15px_#ae6bff] active:scale-95 shadow-xl"
+            className="min-w-[240px] rounded-full border border-ink-200 bg-white px-12 py-5 text-lg font-semibold text-ink-900 transition-all hover:shadow-[0_0_15px_#ae6bff] active:scale-95"
           >
             Patient Portal
           </button>

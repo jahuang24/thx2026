@@ -119,7 +119,6 @@ export function Layout({ children, pageTitle }: { children: React.ReactNode; pag
           <header className="page-header px-8 py-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-ink-400">Operational Atlas</p>
                 <h1 className="font-display font-semibold text-ink-950">
                   {pageTitle}
                 </h1>
